@@ -1,0 +1,22 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+
+# Env
+.env
+.env.*
+
+# Build
+dist/
+build/
+.next/
+out/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

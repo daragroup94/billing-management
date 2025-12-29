@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: isp_postgres
+    environment:
+      POSTGRES_USER: ispuser
+      POSTGRES_PASSWORD: isppass123
+      POSTGRES_DB: ispbilling
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - isp_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ispuser -d ispbilling"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: isp_backend
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ispuser
+      DB_PASSWORD: isppass123
+      DB_NAME: ispbilling
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - isp_network
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build: ./frontend
+    container_name: isp_frontend
+    environment:
+      VITE_API_URL: http://103.31.204.245:5000/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - isp_network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+
+networks:
+  isp_network:
+    driver: bridge
