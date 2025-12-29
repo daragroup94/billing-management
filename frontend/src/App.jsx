@@ -8,6 +8,40 @@ import './App.css';
 
 function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [hoveredMenu, setHoveredMenu] = useState(null);
+
+  const menuItems = [
+    { 
+      id: 'dashboard', 
+      icon: '📊', 
+      label: 'Dashboard',
+      description: 'Lihat statistik dan grafik bisnis'
+    },
+    { 
+      id: 'customers', 
+      icon: '👥', 
+      label: 'Pelanggan',
+      description: 'Kelola data pelanggan'
+    },
+    { 
+      id: 'packages', 
+      icon: '📦', 
+      label: 'Paket Internet',
+      description: 'Kelola paket layanan'
+    },
+    { 
+      id: 'invoices', 
+      icon: '🧾', 
+      label: 'Invoice',
+      description: 'Buat dan kelola tagihan'
+    },
+    { 
+      id: 'payments', 
+      icon: '💳', 
+      label: 'Pembayaran',
+      description: 'Catat pembayaran pelanggan'
+    }
+  ];
 
   const renderContent = () => {
     switch (activeMenu) {
@@ -34,41 +68,44 @@ function App() {
           <p>Management System</p>
         </div>
         <ul className="menu">
-          <li 
-            className={activeMenu === 'dashboard' ? 'active' : ''}
-            onClick={() => setActiveMenu('dashboard')}
-          >
-            <span className="icon">📊</span>
-            <span>Dashboard</span>
-          </li>
-          <li 
-            className={activeMenu === 'customers' ? 'active' : ''}
-            onClick={() => setActiveMenu('customers')}
-          >
-            <span className="icon">👥</span>
-            <span>Pelanggan</span>
-          </li>
-          <li 
-            className={activeMenu === 'packages' ? 'active' : ''}
-            onClick={() => setActiveMenu('packages')}
-          >
-            <span className="icon">📦</span>
-            <span>Paket Internet</span>
-          </li>
-          <li 
-            className={activeMenu === 'invoices' ? 'active' : ''}
-            onClick={() => setActiveMenu('invoices')}
-          >
-            <span className="icon">🧾</span>
-            <span>Invoice</span>
-          </li>
-          <li 
-            className={activeMenu === 'payments' ? 'active' : ''}
-            onClick={() => setActiveMenu('payments')}
-          >
-            <span className="icon">💳</span>
-            <span>Pembayaran</span>
-          </li>
+          {menuItems.map((item) => (
+            <li 
+              key={item.id}
+              className={activeMenu === item.id ? 'active' : ''}
+              onClick={() => setActiveMenu(item.id)}
+              onMouseEnter={() => setHoveredMenu(item.id)}
+              onMouseLeave={() => setHoveredMenu(null)}
+              style={{ position: 'relative' }}
+            >
+              <span className="icon">{item.icon}</span>
+              <span>{item.label}</span>
+              
+              {/* Tooltip */}
+              {hoveredMenu === item.id && activeMenu !== item.id && (
+                <div style={{
+                  position: 'absolute',
+                  left: '100%',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  marginLeft: '12px',
+                  padding: '8px 12px',
+                  background: 'rgba(17, 24, 39, 0.95)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(88, 101, 242, 0.3)',
+                  borderRadius: '8px',
+                  whiteSpace: 'nowrap',
+                  fontSize: '12px',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                  zIndex: 1000,
+                  pointerEvents: 'none',
+                  animation: 'fadeIn 0.2s ease'
+                }}>
+                  {item.description}
+                </div>
+              )}
+            </li>
+          ))}
         </ul>
         <div className="sidebar-footer">
           <p>© 2024 ISP Billing</p>
@@ -77,7 +114,7 @@ function App() {
       </nav>
       <main className="main-content">
         <header className="header">
-          <h1>{activeMenu.charAt(0).toUpperCase() + activeMenu.slice(1)}</h1>
+          <h1>{menuItems.find(m => m.id === activeMenu)?.label || 'Dashboard'}</h1>
           <div className="user-info">
             <span>Admin User</span>
             <div className="avatar">A</div>

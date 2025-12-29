@@ -1,4 +1,3 @@
-// frontend/src/components/Dashboard.jsx
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import api from '../api/client';
@@ -14,6 +13,8 @@ function Dashboard() {
   const [customerGrowth, setCustomerGrowth] = useState([]);
   const [packageDist, setPackageDist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
@@ -33,6 +34,12 @@ function Dashboard() {
       setCustomerGrowth(growthRes.data);
       setPackageDist(distRes.data);
       setLoading(false);
+
+      // Check if user has completed setup
+      const hasData = statsRes.data.totalCustomers > 0 || statsRes.data.totalPackages > 0;
+      if (hasData) {
+        setShowWelcome(false);
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       setLoading(false);
@@ -47,444 +54,596 @@ function Dashboard() {
     }).format(amount);
   };
 
-  // Grafik Revenue dengan gradient dan animasi mewah
+  const setupSteps = [
+    {
+      step: 1,
+      icon: '📦',
+      title: 'Buat Paket Internet',
+      description: 'Tambahkan paket layanan internet dengan harga dan kecepatan',
+      action: 'Paket Internet',
+      color: '#5865f2',
+      completed: stats.totalPackages > 0
+    },
+    {
+      step: 2,
+      icon: '👥',
+      title: 'Daftarkan Pelanggan',
+      description: 'Tambahkan data pelanggan yang akan berlangganan',
+      action: 'Pelanggan',
+      color: '#8b5cf6',
+      completed: stats.totalCustomers > 0
+    },
+    {
+      step: 3,
+      icon: '🧾',
+      title: 'Buat Invoice',
+      description: 'Generate invoice untuk pelanggan berdasarkan paket',
+      action: 'Invoice',
+      color: '#ec4899',
+      completed: false
+    },
+    {
+      step: 4,
+      icon: '💳',
+      title: 'Catat Pembayaran',
+      description: 'Rekam pembayaran yang diterima dari pelanggan',
+      action: 'Pembayaran',
+      color: '#34d399',
+      completed: stats.monthlyRevenue > 0
+    }
+  ];
+
+  // Dark theme chart options
   const revenueChartOptions = {
+    backgroundColor: 'transparent',
     title: {
-      text: 'Revenue Trend',
+      text: 'Tren Revenue',
       left: 'center',
+      top: 10,
       textStyle: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
-        color: '#2d3748'
+        color: 'rgba(255, 255, 255, 0.9)'
       }
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#667eea',
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      borderColor: '#5865f2',
       borderWidth: 1,
-      textStyle: {
-        color: '#2d3748'
-      },
-      axisPointer: {
-        type: 'cross',
-        label: {
-          backgroundColor: '#667eea'
-        }
-      },
+      textStyle: { color: '#fff' },
       formatter: (params) => {
-        const value = formatRupiah(params[0].value);
-        return `${params[0].name}<br/>${params[0].marker} ${value}`;
+        if (params[0]) {
+          return `${params[0].name}<br/>${params[0].marker} ${formatRupiah(params[0].value)}`;
+        }
+        return '';
       }
-    },
-    legend: {
-      data: ['Revenue'],
-      bottom: 10
     },
     grid: {
       left: '3%',
       right: '4%',
-      bottom: '15%',
+      bottom: '3%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: revenueData.map(d => d.month),
-      axisLine: {
-        lineStyle: {
-          color: '#cbd5e0'
-        }
-      },
-      axisLabel: {
-        color: '#4a5568',
-        rotate: 30
-      }
+      axisLine: { lineStyle: { color: 'rgba(88, 101, 242, 0.3)' } },
+      axisLabel: { color: 'rgba(255, 255, 255, 0.7)', rotate: 30, fontSize: 11 },
+      splitLine: { show: false }
     },
     yAxis: {
       type: 'value',
-      axisLine: {
-        show: false
-      },
+      axisLine: { show: false },
       axisLabel: {
-        color: '#4a5568',
-        formatter: (value) => {
-          if (value >= 1000000) {
-            return (value / 1000000).toFixed(1) + 'M';
-          }
-          return value / 1000 + 'K';
-        }
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 11,
+        formatter: (value) => value >= 1000000 ? (value / 1000000).toFixed(1) + 'M' : value / 1000 + 'K'
       },
       splitLine: {
-        lineStyle: {
-          color: '#e2e8f0',
-          type: 'dashed'
-        }
+        lineStyle: { color: 'rgba(88, 101, 242, 0.1)', type: 'dashed' }
       }
     },
-    series: [
-      {
-        name: 'Revenue',
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 8,
-        sampling: 'average',
-        itemStyle: {
-          color: '#667eea'
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              {
-                offset: 0,
-                color: 'rgba(102, 126, 234, 0.5)'
-              },
-              {
-                offset: 1,
-                color: 'rgba(102, 126, 234, 0.05)'
-              }
-            ]
-          }
-        },
-        data: revenueData.map(d => parseFloat(d.revenue))
-      }
-    ],
-    animationDuration: 2000,
-    animationEasing: 'cubicOut'
+    series: [{
+      name: 'Revenue',
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 8,
+      itemStyle: { color: '#5865f2', borderWidth: 2, borderColor: '#fff' },
+      lineStyle: {
+        width: 3,
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 1, y2: 0,
+          colorStops: [
+            { offset: 0, color: '#5865f2' },
+            { offset: 0.5, color: '#8b5cf6' },
+            { offset: 1, color: '#ec4899' }
+          ]
+        }
+      },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(88, 101, 242, 0.5)' },
+            { offset: 1, color: 'rgba(88, 101, 242, 0.05)' }
+          ]
+        }
+      },
+      data: revenueData.map(d => parseFloat(d.revenue))
+    }],
+    animationDuration: 2000
   };
 
-  // Grafik Customer Growth dengan bar chart 3D effect
   const customerGrowthOptions = {
+    backgroundColor: 'transparent',
     title: {
-      text: 'Customer Growth',
+      text: 'Pertumbuhan Pelanggan',
       left: 'center',
-      textStyle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#2d3748'
-      }
+      top: 10,
+      textStyle: { fontSize: 16, fontWeight: 'bold', color: 'rgba(255, 255, 255, 0.9)' }
     },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#48bb78',
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      borderColor: '#34d399',
       borderWidth: 1,
-      axisPointer: {
-        type: 'shadow'
-      }
+      textStyle: { color: '#fff' }
     },
     grid: {
       left: '3%',
       right: '4%',
-      bottom: '10%',
+      bottom: '3%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
       data: customerGrowth.map(d => d.month),
-      axisLine: {
-        lineStyle: {
-          color: '#cbd5e0'
-        }
-      },
-      axisLabel: {
-        color: '#4a5568'
-      }
+      axisLine: { lineStyle: { color: 'rgba(88, 101, 242, 0.3)' } },
+      axisLabel: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
-      axisLine: {
-        show: false
-      },
-      axisLabel: {
-        color: '#4a5568'
-      },
-      splitLine: {
-        lineStyle: {
-          color: '#e2e8f0',
-          type: 'dashed'
-        }
-      }
+      axisLine: { show: false },
+      axisLabel: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 11 },
+      splitLine: { lineStyle: { color: 'rgba(88, 101, 242, 0.1)', type: 'dashed' } }
     },
-    series: [
-      {
-        name: 'Customers',
-        type: 'bar',
-        data: customerGrowth.map(d => parseInt(d.customers)),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              {
-                offset: 0,
-                color: '#48bb78'
-              },
-              {
-                offset: 1,
-                color: '#38a169'
-              }
-            ]
-          },
-          borderRadius: [10, 10, 0, 0]
+    series: [{
+      name: 'Pelanggan',
+      type: 'bar',
+      data: customerGrowth.map(d => parseInt(d.customers)),
+      itemStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: '#34d399' },
+            { offset: 1, color: '#10b981' }
+          ]
         },
-        barWidth: '60%',
-        label: {
-          show: true,
-          position: 'top',
-          color: '#2d3748',
-          fontWeight: 'bold'
-        }
+        borderRadius: [8, 8, 0, 0]
+      },
+      barWidth: '50%',
+      label: {
+        show: true,
+        position: 'top',
+        color: '#34d399',
+        fontWeight: 'bold',
+        fontSize: 12
       }
-    ],
-    animationDuration: 2000,
-    animationEasing: 'elasticOut'
+    }]
   };
 
-  // Grafik Package Distribution dengan donut chart mewah
   const packageDistOptions = {
+    backgroundColor: 'transparent',
     title: {
-      text: 'Package Distribution',
+      text: 'Distribusi Paket',
       left: 'center',
-      textStyle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#2d3748'
-      }
+      top: 10,
+      textStyle: { fontSize: 16, fontWeight: 'bold', color: 'rgba(255, 255, 255, 0.9)' }
     },
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: '#e2e8f0',
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      borderColor: '#5865f2',
       borderWidth: 1,
+      textStyle: { color: '#fff' },
       formatter: '{b}: {c} ({d}%)'
     },
     legend: {
       orient: 'vertical',
       left: 'left',
       top: 'center',
-      textStyle: {
-        color: '#4a5568'
-      }
+      textStyle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12 }
     },
-    series: [
-      {
-        name: 'Packages',
-        type: 'pie',
-        radius: ['40%', '70%'],
-        center: ['60%', '50%'],
-        avoidLabelOverlap: true,
-        itemStyle: {
-          borderRadius: 10,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: {
-          show: true,
-          formatter: '{b}\n{d}%',
-          fontWeight: 'bold'
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 16,
-            fontWeight: 'bold'
-          },
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        },
-        labelLine: {
-          show: true
-        },
-        data: packageDist.map((d, i) => ({
-          value: parseInt(d.count),
-          name: d.name,
-          itemStyle: {
-            color: [
-              '#667eea',
-              '#48bb78',
-              '#f6ad55',
-              '#fc8181'
-            ][i % 4]
-          }
-        }))
-      }
-    ],
-    animationDuration: 2000,
-    animationEasing: 'cubicOut'
-  };
-
-  // Grafik tambahan: Revenue vs Target (gauge)
-  const revenueTargetOptions = {
-    title: {
-      text: 'Monthly Revenue Target',
-      left: 'center',
-      textStyle: {
-        fontSize: 18,
+    series: [{
+      name: 'Paket',
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['60%', '50%'],
+      itemStyle: {
+        borderRadius: 10,
+        borderColor: 'rgba(17, 24, 39, 0.8)',
+        borderWidth: 3
+      },
+      label: {
+        show: true,
+        formatter: '{b}\n{d}%',
         fontWeight: 'bold',
-        color: '#2d3748'
-      }
-    },
-    series: [
-      {
-        type: 'gauge',
-        startAngle: 180,
-        endAngle: 0,
-        min: 0,
-        max: 10000000,
-        splitNumber: 5,
-        center: ['50%', '70%'],
-        radius: '90%',
+        color: '#fff',
+        fontSize: 11
+      },
+      data: packageDist.map((d, i) => ({
+        value: parseInt(d.count),
+        name: d.name,
         itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 1,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#667eea' },
-              { offset: 0.5, color: '#764ba2' },
-              { offset: 1, color: '#f093fb' }
-            ]
-          }
-        },
-        progress: {
-          show: true,
-          roundCap: true,
-          width: 18
-        },
-        pointer: {
-          icon: 'path://M2.9,0.7L2.9,0.7c1.4,0,2.6,1.2,2.6,2.6v115c0,1.4-1.2,2.6-2.6,2.6l0,0c-1.4,0-2.6-1.2-2.6-2.6V3.3C0.3,1.9,1.4,0.7,2.9,0.7z',
-          width: 10,
-          length: '75%',
-          offsetCenter: [0, '5%']
-        },
-        axisLine: {
-          roundCap: true,
-          lineStyle: {
-            width: 18
-          }
-        },
-        axisTick: {
-          show: false
-        },
-        splitLine: {
-          show: false
-        },
-        axisLabel: {
-          distance: 25,
-          color: '#4a5568',
-          fontSize: 12,
-          formatter: (value) => {
-            return (value / 1000000) + 'M';
-          }
-        },
-        title: {
-          show: false
-        },
-        detail: {
-          backgroundColor: '#fff',
-          borderColor: '#667eea',
-          borderWidth: 2,
-          width: '60%',
-          lineHeight: 40,
-          height: 40,
-          borderRadius: 8,
-          offsetCenter: [0, '35%'],
-          valueAnimation: true,
-          formatter: (value) => {
-            return formatRupiah(value);
-          },
-          color: '#2d3748',
-          fontSize: 16,
-          fontWeight: 'bold'
-        },
-        data: [{ value: stats.monthlyRevenue }]
-      }
-    ],
-    animationDuration: 4000,
-    animationEasing: 'elasticOut'
+          color: ['#5865f2', '#8b5cf6', '#ec4899', '#f59e0b'][i % 4]
+        }
+      }))
+    }]
   };
 
   if (loading) {
-    return <div className="loading">Loading dashboard data...</div>;
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '400px',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <div style={{
+          width: '60px',
+          height: '60px',
+          border: '4px solid rgba(88, 101, 242, 0.2)',
+          borderTop: '4px solid #5865f2',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+          }
+        `}</style>
+        <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '16px', fontWeight: '600' }}>
+          Memuat dashboard...
+        </p>
+      </div>
+    );
   }
+
+  const hasData = stats.totalCustomers > 0 || stats.totalPackages > 0;
 
   return (
     <div>
+      {/* Welcome Banner - Only show when no data */}
+      {!hasData && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(88, 101, 242, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)',
+          backdropFilter: 'blur(20px)',
+          padding: '32px',
+          borderRadius: '20px',
+          border: '2px solid rgba(88, 101, 242, 0.3)',
+          marginBottom: '32px',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '-50%',
+            right: '-10%',
+            width: '400px',
+            height: '400px',
+            background: 'radial-gradient(circle, rgba(88, 101, 242, 0.3) 0%, transparent 70%)',
+            animation: 'pulse 3s ease-in-out infinite'
+          }}></div>
+          
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+              <div style={{ fontSize: '64px', marginBottom: '16px' }}>🎉</div>
+              <h2 style={{
+                fontSize: '32px',
+                fontWeight: '900',
+                marginBottom: '12px',
+                background: 'linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                Selamat Datang di ISP Billing System!
+              </h2>
+              <p style={{
+                fontSize: '16px',
+                color: 'rgba(255, 255, 255, 0.7)',
+                maxWidth: '600px',
+                margin: '0 auto',
+                lineHeight: '1.6'
+              }}>
+                Mari kita mulai dengan setup awal. Ikuti 4 langkah sederhana untuk menggunakan sistem billing Anda.
+              </p>
+            </div>
+
+            {/* Setup Steps */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '20px',
+              marginTop: '32px'
+            }}>
+              {setupSteps.map((step, index) => (
+                <div
+                  key={step.step}
+                  style={{
+                    background: step.completed 
+                      ? 'rgba(52, 211, 153, 0.15)' 
+                      : 'rgba(17, 24, 39, 0.6)',
+                    backdropFilter: 'blur(10px)',
+                    padding: '24px',
+                    borderRadius: '16px',
+                    border: step.completed 
+                      ? '2px solid rgba(52, 211, 153, 0.5)' 
+                      : '2px solid rgba(88, 101, 242, 0.3)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = `0 12px 40px ${step.color}44`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {step.completed && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      width: '32px',
+                      height: '32px',
+                      background: 'rgba(52, 211, 153, 0.2)',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '16px',
+                      border: '2px solid rgba(52, 211, 153, 0.5)'
+                    }}>
+                      ✅
+                    </div>
+                  )}
+                  
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '14px',
+                    background: `${step.color}22`,
+                    border: `2px solid ${step.color}44`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '32px',
+                    marginBottom: '16px'
+                  }}>
+                    {step.icon}
+                  </div>
+                  
+                  <div style={{
+                    fontSize: '12px',
+                    color: step.color,
+                    fontWeight: '700',
+                    marginBottom: '8px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px'
+                  }}>
+                    Langkah {step.step}
+                  </div>
+                  
+                  <h3 style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    color: 'white',
+                    marginBottom: '8px'
+                  }}>
+                    {step.title}
+                  </h3>
+                  
+                  <p style={{
+                    fontSize: '13px',
+                    color: 'rgba(255, 255, 255, 0.6)',
+                    lineHeight: '1.5',
+                    marginBottom: '16px'
+                  }}>
+                    {step.description}
+                  </p>
+                  
+                  <div style={{
+                    padding: '10px 16px',
+                    background: step.completed 
+                      ? 'rgba(52, 211, 153, 0.2)' 
+                      : `${step.color}22`,
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: step.completed ? '#34d399' : step.color,
+                    textAlign: 'center',
+                    border: step.completed 
+                      ? '1px solid rgba(52, 211, 153, 0.5)' 
+                      : `1px solid ${step.color}44`
+                  }}>
+                    {step.completed ? '✓ Selesai' : `Klik menu "${step.action}"`}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Tips */}
+            <div style={{
+              marginTop: '32px',
+              padding: '20px',
+              background: 'rgba(88, 101, 242, 0.1)',
+              borderRadius: '12px',
+              border: '1px solid rgba(88, 101, 242, 0.3)'
+            }}>
+              <div style={{
+                fontSize: '14px',
+                color: 'rgba(255, 255, 255, 0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '24px' }}>💡</span>
+                <div>
+                  <strong style={{ color: '#5865f2' }}>Tips:</strong> Gunakan menu sidebar di sebelah kiri untuk navigasi. 
+                  Mulai dengan menambahkan <strong>Paket Internet</strong> terlebih dahulu!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Cards */}
       <div className="stat-cards">
-        <div className="stat-card">
+        <div className="stat-card" style={{ position: 'relative' }}>
           <div className="icon">👥</div>
           <h3>Total Pelanggan</h3>
           <div className="value">{stats.totalCustomers}</div>
-          <div className="trend">↑ 12% dari bulan lalu</div>
+          <div className="trend" style={{
+            background: stats.totalCustomers > 0 ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+            color: stats.totalCustomers > 0 ? '#34d399' : 'rgba(255, 255, 255, 0.5)'
+          }}>
+            {stats.totalCustomers > 0 ? 'Pelanggan Aktif' : 'Belum ada data'}
+          </div>
+          {stats.totalCustomers === 0 && (
+            <div style={{
+              marginTop: '12px',
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontStyle: 'italic'
+            }}>
+              📌 Klik menu "Pelanggan" untuk menambah
+            </div>
+          )}
         </div>
+
         <div className="stat-card">
           <div className="icon">💰</div>
           <h3>Revenue Bulan Ini</h3>
           <div className="value">{formatRupiah(stats.monthlyRevenue)}</div>
-          <div className="trend">↑ 8% dari bulan lalu</div>
+          <div className="trend" style={{
+            background: stats.monthlyRevenue > 0 ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+            color: stats.monthlyRevenue > 0 ? '#34d399' : 'rgba(255, 255, 255, 0.5)'
+          }}>
+            {stats.monthlyRevenue > 0 ? 'Total Pembayaran' : 'Belum ada data'}
+          </div>
+          {stats.monthlyRevenue === 0 && (
+            <div style={{
+              marginTop: '12px',
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontStyle: 'italic'
+            }}>
+              📌 Catat pembayaran di menu "Pembayaran"
+            </div>
+          )}
         </div>
+
         <div className="stat-card">
           <div className="icon">🧾</div>
           <h3>Invoice Pending</h3>
           <div className="value">{stats.pendingInvoices}</div>
-          <div className="trend" style={{ color: '#f56565' }}>Perlu ditagih</div>
+          <div className="trend" style={{ 
+            color: stats.pendingInvoices > 0 ? '#ef4444' : '#34d399',
+            background: stats.pendingInvoices > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(52, 211, 153, 0.15)',
+            borderColor: stats.pendingInvoices > 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(52, 211, 153, 0.3)'
+          }}>
+            {stats.pendingInvoices > 0 ? 'Perlu Ditagih' : 'Semua Lunas'}
+          </div>
+          {stats.pendingInvoices === 0 && (
+            <div style={{
+              marginTop: '12px',
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontStyle: 'italic'
+            }}>
+              📌 Buat invoice di menu "Invoice"
+            </div>
+          )}
         </div>
+
         <div className="stat-card">
           <div className="icon">📦</div>
           <h3>Total Paket</h3>
           <div className="value">{stats.totalPackages}</div>
-          <div className="trend">Paket aktif</div>
+          <div className="trend" style={{
+            background: stats.totalPackages > 0 ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+            color: stats.totalPackages > 0 ? '#34d399' : 'rgba(255, 255, 255, 0.5)'
+          }}>
+            {stats.totalPackages > 0 ? 'Paket Tersedia' : 'Belum ada data'}
+          </div>
+          {stats.totalPackages === 0 && (
+            <div style={{
+              marginTop: '12px',
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontStyle: 'italic'
+            }}>
+              📌 Tambah paket di menu "Paket Internet"
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="charts-grid">
-        <div className="chart-card">
-          <ReactECharts
-            option={revenueChartOptions}
-            style={{ height: '400px' }}
-            opts={{ renderer: 'svg' }}
-          />
+      {/* Charts - Only show if has data */}
+      {hasData && (revenueData.length > 0 || customerGrowth.length > 0) && (
+        <div className="charts-grid">
+          {revenueData.length > 0 && (
+            <div className="chart-card">
+              <ReactECharts
+                option={revenueChartOptions}
+                style={{ height: '400px' }}
+                opts={{ renderer: 'svg' }}
+              />
+            </div>
+          )}
+          {customerGrowth.length > 0 && (
+            <div className="chart-card">
+              <ReactECharts
+                option={customerGrowthOptions}
+                style={{ height: '400px' }}
+                opts={{ renderer: 'svg' }}
+              />
+            </div>
+          )}
         </div>
-        <div className="chart-card">
-          <ReactECharts
-            option={customerGrowthOptions}
-            style={{ height: '400px' }}
-            opts={{ renderer: 'svg' }}
-          />
-        </div>
-      </div>
+      )}
 
-      <div className="charts-grid">
-        <div className="chart-card">
-          <ReactECharts
-            option={packageDistOptions}
-            style={{ height: '400px' }}
-            opts={{ renderer: 'svg' }}
-          />
+      {hasData && packageDist.length > 0 && (
+        <div className="charts-grid">
+          <div className="chart-card">
+            <ReactECharts
+              option={packageDistOptions}
+              style={{ height: '400px' }}
+              opts={{ renderer: 'svg' }}
+            />
+          </div>
         </div>
-        <div className="chart-card">
-          <ReactECharts
-            option={revenueTargetOptions}
-            style={{ height: '400px' }}
-            opts={{ renderer: 'svg' }}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 }

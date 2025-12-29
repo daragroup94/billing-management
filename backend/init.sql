@@ -55,16 +55,5 @@ CREATE TABLE IF NOT EXISTS payments (
     notes TEXT
 );
 
--- Insert Sample Data
-INSERT INTO packages (name, speed, price, description) VALUES
-('Basic', '10 Mbps', 150000, 'Paket internet dasar untuk browsing'),
-('Standard', '20 Mbps', 250000, 'Paket standar untuk streaming'),
-('Premium', '50 Mbps', 450000, 'Paket premium untuk gaming'),
-('Ultimate', '100 Mbps', 750000, 'Paket ultimate untuk bisnis');
-
-INSERT INTO customers (name, email, phone, address, status) VALUES
-('Ahmad Wijaya', 'ahmad@email.com', '081234567890', 'Jl. Merdeka No. 123', 'active'),
-('Siti Rahayu', 'siti@email.com', '081234567891', 'Jl. Sudirman No. 456', 'active'),
-('Budi Santoso', 'budi@email.com', '081234567892', 'Jl. Gatot Subroto No. 789', 'active'),
-('Dewi Lestari', 'dewi@email.com', '081234567893', 'Jl. Ahmad Yani No. 321', 'active'),
-('Eko Prasetyo', 'eko@email.com', '081234567894', 'Jl. Diponegoro No. 654', 'inactive');
+-- NO MOCK DATA - Clean Start
+-- Users can add their own data through the application

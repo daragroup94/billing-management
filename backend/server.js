@@ -165,7 +165,7 @@ app.post('/api/packages', async (req, res) => {
   }
 });
 
-// Invoices
+// Invoices CRUD - UPDATED
 app.get('/api/invoices', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -175,6 +175,73 @@ app.get('/api/invoices', async (req, res) => {
       ORDER BY i.created_at DESC
     `);
     res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create Invoice
+app.post('/api/invoices/create', async (req, res) => {
+  const { customer_id, package_id, invoice_number, amount, due_date } = req.body;
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Create or get subscription
+    let subscription = await client.query(
+      'SELECT id FROM subscriptions WHERE customer_id = $1 AND package_id = $2 AND status = $3',
+      [customer_id, package_id, 'active']
+    );
+    
+    let subscription_id;
+    if (subscription.rows.length === 0) {
+      const newSub = await client.query(
+        'INSERT INTO subscriptions (customer_id, package_id, start_date, status) VALUES ($1, $2, CURRENT_DATE, $3) RETURNING id',
+        [customer_id, package_id, 'active']
+      );
+      subscription_id = newSub.rows[0].id;
+    } else {
+      subscription_id = subscription.rows[0].id;
+    }
+    
+    // Create invoice
+    const invoice = await client.query(
+      'INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [customer_id, subscription_id, invoice_number, amount, due_date, 'unpaid']
+    );
+    
+    await client.query('COMMIT');
+    res.status(201).json(invoice.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Update Invoice Status
+app.put('/api/invoices/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE invoices SET status = $1 WHERE id = $2 RETURNING *',
+      [status, id]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete Invoice
+app.delete('/api/invoices/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM invoices WHERE id=$1', [id]);
+    res.json({ message: 'Invoice deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
