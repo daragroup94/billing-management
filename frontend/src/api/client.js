@@ -1,15 +1,19 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: '/api', 
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Request interceptor
+// Request interceptor: MENYISIPKAN TOKEN KE SETIAP REQUEST
 api.interceptors.request.use(
   (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -23,7 +27,10 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('API Error:', error);
+    // Jangan log error 401 secara berlebihan jika memang sedang proses verifikasi
+    if (error.response?.status !== 401) {
+        console.error('API Error:', error.response?.data || error.message);
+    }
     return Promise.reject(error);
   }
 );

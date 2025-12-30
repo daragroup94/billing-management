@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // Ditambahkan untuk navigasi
 import { motion } from 'framer-motion';
 import { Lock, User, AlertCircle, Eye, EyeOff, Wifi } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +7,8 @@ import toast from 'react-hot-toast';
 
 const Login = () => {
   const { login } = useAuth();
+  const navigate = useNavigate(); // Inisialisasi navigasi
+  
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -23,12 +26,15 @@ const Login = () => {
       const result = await login(formData.username, formData.password);
       
       if (result.success) {
-        toast.success(`Welcome back, ${result.user.full_name || result.user.username}!`);
+        toast.success(`Welcome back, ${result.user?.full_name || result.user?.username || 'Admin'}!`);
+        // Navigasi ke dashboard utama setelah login sukses
+        navigate('/', { replace: true });
       } else {
         setError(result.error);
         toast.error(result.error);
       }
     } catch (error) {
+      console.error('Login error:', error);
       setError('An unexpected error occurred');
       toast.error('Login failed');
     } finally {
@@ -41,7 +47,7 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value
     });
-    // Clear error when user types
+    // Clear error saat user mulai mengetik ulang
     if (error) setError('');
   };
 
@@ -58,19 +64,19 @@ const Login = () => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md relative z-10"
       >
-        <div className="glass rounded-2xl p-8 shadow-2xl border border-white/10">
+        <div className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-8 shadow-2xl border border-white/10">
           {/* Logo & Title */}
           <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: 'spring' }}
-              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 mb-4"
+              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 mb-4 shadow-lg shadow-blue-500/20"
             >
               <Wifi size={32} className="text-white" />
             </motion.div>
             
-            <h1 className="text-3xl font-bold gradient-text mb-2">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
               ISP Billing System
             </h1>
             <p className="text-slate-400 text-sm">
@@ -109,7 +115,7 @@ const Login = () => {
                   onChange={handleChange}
                   required
                   disabled={loading}
-                  className="input pl-12 w-full"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all disabled:opacity-50"
                   placeholder="Enter your username"
                   autoComplete="username"
                 />
@@ -130,7 +136,7 @@ const Login = () => {
                   onChange={handleChange}
                   required
                   disabled={loading}
-                  className="input pl-12 pr-12 w-full"
+                  className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-3 pl-12 pr-12 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all disabled:opacity-50"
                   placeholder="Enter your password"
                   autoComplete="current-password"
                 />
@@ -151,11 +157,11 @@ const Login = () => {
               whileTap={{ scale: loading ? 1 : 0.98 }}
               type="submit"
               disabled={loading}
-              className="w-full btn-primary py-3 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white py-3 rounded-xl text-base font-semibold shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {loading ? (
                 <div className="flex items-center justify-center gap-2">
-                  <div className="spinner w-5 h-5"></div>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                   <span>Signing in...</span>
                 </div>
               ) : (
@@ -165,19 +171,19 @@ const Login = () => {
           </form>
 
           {/* Demo Credentials */}
-          <div className="mt-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
+          <div className="mt-6 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
             <p className="text-blue-400 font-semibold text-sm mb-2 flex items-center gap-2">
               <Lock size={16} />
               Demo Credentials
             </p>
-            <div className="text-xs text-slate-300 space-y-1">
-              <p><span className="text-slate-400">Username:</span> <code className="bg-white/5 px-2 py-0.5 rounded">admin</code></p>
-              <p><span className="text-slate-400">Password:</span> <code className="bg-white/5 px-2 py-0.5 rounded">daragroup1994</code></p>
+            <div className="text-xs text-slate-400 space-y-1">
+              <p><span className="text-slate-500">Username:</span> <code className="bg-white/5 px-2 py-0.5 rounded text-blue-300">admin</code></p>
+              <p><span className="text-slate-500">Password:</span> <code className="bg-white/5 px-2 py-0.5 rounded text-blue-300">daragroup1994</code></p>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="mt-6 text-center">
+          <div className="mt-8 text-center">
             <p className="text-xs text-slate-500">
               © 2025 ISP Billing System. All rights reserved.
             </p>
@@ -185,8 +191,8 @@ const Login = () => {
         </div>
 
         {/* Decorative Elements */}
-        <div className="absolute -top-4 -right-4 w-24 h-24 bg-blue-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl" />
+        <div className="absolute -top-4 -right-4 w-24 h-24 bg-blue-500/10 rounded-full blur-3xl -z-10" />
+        <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -z-10" />
       </motion.div>
     </div>
   );

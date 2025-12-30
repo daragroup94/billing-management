@@ -1,20 +1,41 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import api from '../api/client'; 
 
 const AuthContext = createContext(null);
-
-// Untuk Docker: gunakan '/api' (akan di-proxy oleh Vite)
-// Untuk local development: gunakan 'http://localhost:5000/api'
-const api = axios.create({
-  baseURL: '/api'
-});
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Setup axios interceptor untuk menambahkan token ke setiap request
+  // Fungsi Helper untuk membersihkan sesi (tanpa panggil API)
+  // Gunakan useCallback agar bisa dipakai di dalam useEffect tanpa warning
+  const cleanupAuth = useCallback(() => {
+    localStorage.removeItem('token');
+    delete api.defaults.headers.common['Authorization'];
+    setUser(null);
+    setIsAuthenticated(false);
+    setLoading(false);
+  }, []);
+
+  const verifyToken = useCallback(async () => {
+    try {
+      const response = await api.get('/auth/verify');
+      if (response.data.valid) {
+        setUser(response.data.user);
+        setIsAuthenticated(true);
+      } else {
+        cleanupAuth();
+      }
+    } catch (error) {
+      console.error('Token verification failed:', error.message);
+      cleanupAuth();
+    } finally {
+      setLoading(false);
+    }
+  }, [cleanupAuth]);
+
+  // Setup Axios Interceptor & Initial Check
   useEffect(() => {
     const token = localStorage.getItem('token');
     
@@ -25,52 +46,45 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
 
-    // Intercept response untuk handle 401 (unauthorized)
+    // Interceptor untuk menangani error global (terutama 401)
     const interceptor = api.interceptors.response.use(
       (response) => response,
       (error) => {
+        const originalRequest = error.config;
+
+        // Jika error 401 (Unauthorized)
         if (error.response?.status === 401) {
-          logout();
+          // Jika 401 terjadi saat login, jangan logout (biarkan Login.jsx handle errornya)
+          if (originalRequest.url.includes('/auth/login')) {
+            return Promise.reject(error);
+          }
+
+          // Jika 401 terjadi saat logout atau verify, langsung bersihkan lokal
+          if (originalRequest.url.includes('/auth/logout') || originalRequest.url.includes('/auth/verify')) {
+            cleanupAuth();
+          } else {
+            // Untuk request lainnya, jalankan logout formal
+            logout();
+          }
         }
         return Promise.reject(error);
       }
     );
 
+    // Cleanup interceptor saat component unmount
     return () => {
       api.interceptors.response.eject(interceptor);
     };
-  }, []);
-
-  const verifyToken = async () => {
-    try {
-      const response = await api.get('/auth/verify');
-      if (response.data.valid) {
-        setUser(response.data.user);
-        setIsAuthenticated(true);
-      } else {
-        logout();
-      }
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      logout();
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [cleanupAuth, verifyToken]);
 
   const login = async (username, password) => {
     try {
       const response = await api.post('/auth/login', { username, password });
-      
       const { token, user } = response.data;
       
-      // Simpan token ke localStorage
       localStorage.setItem('token', token);
-      
-      // Set token ke axios header
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      // Update state
       setUser(user);
       setIsAuthenticated(true);
       
@@ -79,26 +93,19 @@ export const AuthProvider = ({ children }) => {
       console.error('Login error:', error);
       return { 
         success: false, 
-        error: error.response?.data?.message || 'Login failed' 
+        error: error.response?.data?.message || 'Login gagal. Cek kembali username/password.' 
       };
     }
   };
 
   const logout = async () => {
     try {
+      // Panggil API logout (optional, untuk hapus session di server jika ada)
       await api.post('/auth/logout');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.warn('Logout API call failed, but proceeding with local cleanup.');
     } finally {
-      // Hapus token dari localStorage
-      localStorage.removeItem('token');
-      
-      // Hapus token dari axios header
-      delete api.defaults.headers.common['Authorization'];
-      
-      // Reset state
-      setUser(null);
-      setIsAuthenticated(false);
+      cleanupAuth();
     }
   };
 
@@ -109,14 +116,13 @@ export const AuthProvider = ({ children }) => {
         newPassword
       });
       
-      // Logout setelah password berubah
+      // Setelah ganti password, biasanya paksa logout untuk login ulang
       await logout();
-      
       return { success: true, message: response.data.message };
     } catch (error) {
       return { 
         success: false, 
-        error: error.response?.data?.error || 'Failed to change password' 
+        error: error.response?.data?.error || 'Gagal mengubah password' 
       };
     }
   };
@@ -128,12 +134,12 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     changePassword,
-    api // Export api instance untuk digunakan di komponen lain
+    api // Instance API dibagikan agar komponen lain bisa pakai interceptor yang sama
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
@@ -145,5 +151,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export { api };

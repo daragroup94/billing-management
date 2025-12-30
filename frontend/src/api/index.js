@@ -1,94 +1,54 @@
-const API_URL = '/api';
-
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Network error' }));
-    throw new Error(error.error || 'Something went wrong');
-  }
-  return response.json();
-};
+import api from './client'; // Menggunakan axios instance yang sudah ada tokennya
 
 export const dashboardAPI = {
   getStats: () => 
-    fetch(`${API_URL}/dashboard/stats`).then(handleResponse),
+    api.get('/dashboard/stats').then(res => res.data),
   getRevenueChart: () => 
-    fetch(`${API_URL}/dashboard/revenue-chart`).then(handleResponse),
+    api.get('/dashboard/revenue-chart').then(res => res.data),
   getCustomerGrowth: () => 
-    fetch(`${API_URL}/dashboard/customer-growth`).then(handleResponse),
+    api.get('/dashboard/customer-growth').then(res => res.data),
   getPackageDistribution: () => 
-    fetch(`${API_URL}/dashboard/package-distribution`).then(handleResponse),
+    api.get('/dashboard/package-distribution').then(res => res.data),
   getRecentActivity: () => 
-    fetch(`${API_URL}/dashboard/recent-activity`).then(handleResponse),
+    api.get('/dashboard/recent-activity').then(res => res.data),
 };
 
 export const customersAPI = {
-  getAll: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return fetch(`${API_URL}/customers?${queryString}`).then(handleResponse);
-  },
+  getAll: (params = {}) => 
+    api.get('/customers', { params }).then(res => res.data),
   create: (data) =>
-    fetch(`${API_URL}/customers`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.post('/customers', data).then(res => res.data),
   update: (id, data) =>
-    fetch(`${API_URL}/customers/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.put(`/customers/${id}`, data).then(res => res.data),
   delete: (id) =>
-    fetch(`${API_URL}/customers/${id}`, { method: 'DELETE' }).then(handleResponse),
+    api.delete(`/customers/${id}`).then(res => res.data),
 };
 
 export const packagesAPI = {
   getAll: () => 
-    fetch(`${API_URL}/packages`).then(handleResponse),
+    api.get('/packages').then(res => res.data),
   create: (data) =>
-    fetch(`${API_URL}/packages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.post('/packages', data).then(res => res.data),
   update: (id, data) =>
-    fetch(`${API_URL}/packages/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.put(`/packages/${id}`, data).then(res => res.data),
   delete: (id) =>
-    fetch(`${API_URL}/packages/${id}`, { method: 'DELETE' }).then(handleResponse),
+    api.delete(`/packages/${id}`).then(res => res.data),
 };
 
 export const invoicesAPI = {
-  getAll: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return fetch(`${API_URL}/invoices?${queryString}`).then(handleResponse);
-  },
+  getAll: (params = {}) => 
+    api.get('/invoices', { params }).then(res => res.data),
   create: (data) =>
-    fetch(`${API_URL}/invoices/create`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.post('/invoices/create', data).then(res => res.data),
   updateStatus: (id, status) =>
-    fetch(`${API_URL}/invoices/${id}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    }).then(handleResponse),
+    api.put(`/invoices/${id}/status`, { status }).then(res => res.data),
   delete: (id) =>
-    fetch(`${API_URL}/invoices/${id}`, { method: 'DELETE' }).then(handleResponse),
+    api.delete(`/invoices/${id}`).then(res => res.data),
 };
 
 export const paymentsAPI = {
   getAll: () => 
-    fetch(`${API_URL}/payments`).then(handleResponse),
+    api.get('/payments').then(res => res.data),
   create: (data) =>
-    fetch(`${API_URL}/payments`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.post('/payments', data).then(res => res.data),
 };
