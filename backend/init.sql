@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS users (
 INSERT INTO users (username, password, email, full_name, role, status) 
 VALUES (
     'admin', 
-    '$2a$10$rQH5H5qJ5PxJZGKg5yYJ8.xK7qVXJ9RQH5H5qJ5PxJZGKg5yYJ8.u', 
+    '$2b$10$9SPmuQ2hcYfSePxIjJT/J.0lJXrQmrwRGufWTscS0/eaKfUDx8GmC', 
     'admin@ispbilling.com', 
     'Administrator', 
     'admin', 
