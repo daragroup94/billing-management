@@ -8,6 +8,7 @@ import Customers from './pages/Customers';
 import Packages from './pages/Packages';
 import Invoices from './pages/Invoices';
 import Payments from './pages/Payments';
+import Settings from './pages/Settings';
 
 function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -25,7 +26,8 @@ function App() {
       customers: <Customers />,
       packages: <Packages />,
       invoices: <Invoices />,
-      payments: <Payments />
+      payments: <Payments />,
+      settings: <Settings />
     };
 
     return (

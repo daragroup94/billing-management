@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Plus, Search, Edit2, Trash2, Mail, Phone, MapPin, X } from 'lucide-react';
-import { customersAPI } from '../api';
+import { Users, Plus, Edit2, Trash2, Mail, Phone, MapPin, X, Package, Calendar } from 'lucide-react';
+import { customersAPI, packagesAPI } from '../api';
 import toast from 'react-hot-toast';
 
 const Customers = () => {
   const [customers, setCustomers] = useState([]);
+  const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -16,20 +17,27 @@ const Customers = () => {
     phone: '',
     address: '',
     installation_address: '',
+    package_id: '',
+    installation_date: '',
+    payment_due_date: '',
     status: 'active'
   });
 
   useEffect(() => {
-    fetchCustomers();
+    fetchData();
   }, [searchTerm]);
 
-  const fetchCustomers = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const data = await customersAPI.getAll({ search: searchTerm });
-      setCustomers(data.data || data);
+      const [customersData, packagesData] = await Promise.all([
+        customersAPI.getAll({ search: searchTerm }),
+        packagesAPI.getAll()
+      ]);
+      setCustomers(customersData.data || customersData);
+      setPackages(packagesData);
     } catch (error) {
-      toast.error('Failed to fetch customers');
+      toast.error('Failed to fetch data');
       console.error(error);
     } finally {
       setLoading(false);
@@ -48,7 +56,7 @@ const Customers = () => {
       }
       setShowModal(false);
       resetForm();
-      fetchCustomers();
+      fetchData();
     } catch (error) {
       toast.error(error.message || 'Operation failed');
     }
@@ -59,7 +67,7 @@ const Customers = () => {
     try {
       await customersAPI.delete(id);
       toast.success('Customer deleted successfully!');
-      fetchCustomers();
+      fetchData();
     } catch (error) {
       toast.error(error.message || 'Delete failed');
     }
@@ -73,6 +81,9 @@ const Customers = () => {
       phone: customer.phone || '',
       address: customer.address || '',
       installation_address: customer.installation_address || '',
+      package_id: customer.package_id || '',
+      installation_date: customer.installation_date || '',
+      payment_due_date: customer.payment_due_date || '',
       status: customer.status
     });
     setShowModal(true);
@@ -85,6 +96,9 @@ const Customers = () => {
       phone: '',
       address: '',
       installation_address: '',
+      package_id: '',
+      installation_date: '',
+      payment_due_date: '',
       status: 'active'
     });
     setEditingCustomer(null);
@@ -120,13 +134,12 @@ const Customers = () => {
       {/* Search Bar */}
       <div className="card">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input
             type="text"
-            placeholder="Search customers by name, email, or phone..."
+            placeholder="Search customers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="input pl-12"
+            className="input pl-4"
           />
         </div>
       </div>
@@ -190,6 +203,18 @@ const Customers = () => {
                   <div className="flex items-center gap-2 text-slate-400">
                     <MapPin size={16} />
                     <span className="line-clamp-1">{customer.address}</span>
+                  </div>
+                )}
+                {customer.package_id && (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Package size={16} />
+                    <span>Package ID: {customer.package_id}</span>
+                  </div>
+                )}
+                {customer.installation_date && (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Calendar size={16} />
+                    <span>Installed: {new Date(customer.installation_date).toLocaleDateString()}</span>
                   </div>
                 )}
               </div>
@@ -291,6 +316,42 @@ const Customers = () => {
                     onChange={(e) => setFormData({ ...formData, installation_address: e.target.value })}
                     className="input min-h-[80px]"
                     placeholder="Installation address (if different)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Package</label>
+                  <select
+                    value={formData.package_id}
+                    onChange={(e) => setFormData({ ...formData, package_id: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">Select Package</option>
+                    {packages.map(pkg => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name} - {pkg.speed} - Rp {pkg.price.toLocaleString('id-ID')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Installation Date</label>
+                  <input
+                    type="date"
+                    value={formData.installation_date}
+                    onChange={(e) => setFormData({ ...formData, installation_date: e.target.value })}
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Payment Due Date</label>
+                  <input
+                    type="date"
+                    value={formData.payment_due_date}
+                    onChange={(e) => setFormData({ ...formData, payment_due_date: e.target.value })}
+                    className="input"
                   />
                 </div>
 

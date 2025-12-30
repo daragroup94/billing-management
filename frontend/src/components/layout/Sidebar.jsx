@@ -6,7 +6,8 @@ import {
   FileText, 
   CreditCard,
   Settings,
-  LogOut
+  LogOut,
+  Bell
 } from 'lucide-react';
 
 export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
@@ -17,6 +18,13 @@ export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
     { id: 'invoices', label: 'Invoices', icon: FileText },
     { id: 'payments', label: 'Payments', icon: CreditCard },
   ];
+
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to logout?')) {
+      // Add logout logic here
+      alert('Logout functionality will be implemented');
+    }
+  };
 
   return (
     <motion.aside
@@ -60,16 +68,42 @@ export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
           })}
         </nav>
 
-        {/* Bottom Section */}
+        {/* Bottom Section - Settings & Logout */}
         <div className="space-y-2 pt-6 border-t border-white/10">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+          {/* Settings Button - NOW FUNCTIONAL */}
+          <motion.button
+            whileHover={{ x: 4 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setActiveMenu('settings')}
+            className={`
+              w-full flex items-center gap-3 px-4 py-3 rounded-xl
+              transition-all duration-300 text-left
+              ${activeMenu === 'settings'
+                ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border border-blue-500/30'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }
+            `}
+          >
             <Settings size={20} />
             <span className="font-medium">Settings</span>
-          </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">
+          </motion.button>
+
+          {/* Logout Button */}
+          <motion.button
+            whileHover={{ x: 4 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+          >
             <LogOut size={20} />
             <span className="font-medium">Logout</span>
-          </button>
+          </motion.button>
+        </div>
+
+        {/* Version Info */}
+        <div className="mt-4 text-center text-xs text-slate-500">
+          <p>ISP Billing v2.0</p>
+          <p className="mt-1">© 2025 All Rights Reserved</p>
         </div>
       </div>
     </motion.aside>
