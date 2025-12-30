@@ -1,129 +1,103 @@
-import React, { useState } from 'react';
-import Dashboard from './components/Dashboard';
-import Customers from './components/Customers';
-import Packages from './components/Packages';
-import Invoices from './components/Invoices';
-import Payments from './components/Payments';
-import './App.css';
+import { useState } from 'react';
+import { Toaster } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
+import Sidebar from './components/layout/Sidebar';
+import Header from './components/layout/Header';
+import Dashboard from './pages/Dashboard';
+import Customers from './pages/Customers';
+import Packages from './pages/Packages';
+import Invoices from './pages/Invoices';
+import Payments from './pages/Payments';
 
 function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [hoveredMenu, setHoveredMenu] = useState(null);
-
-  const menuItems = [
-    { 
-      id: 'dashboard', 
-      icon: '📊', 
-      label: 'Dashboard',
-      description: 'Lihat statistik dan grafik bisnis'
-    },
-    { 
-      id: 'customers', 
-      icon: '👥', 
-      label: 'Pelanggan',
-      description: 'Kelola data pelanggan'
-    },
-    { 
-      id: 'packages', 
-      icon: '📦', 
-      label: 'Paket Internet',
-      description: 'Kelola paket layanan'
-    },
-    { 
-      id: 'invoices', 
-      icon: '🧾', 
-      label: 'Invoice',
-      description: 'Buat dan kelola tagihan'
-    },
-    { 
-      id: 'payments', 
-      icon: '💳', 
-      label: 'Pembayaran',
-      description: 'Catat pembayaran pelanggan'
-    }
-  ];
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const renderContent = () => {
-    switch (activeMenu) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'customers':
-        return <Customers />;
-      case 'packages':
-        return <Packages />;
-      case 'invoices':
-        return <Invoices />;
-      case 'payments':
-        return <Payments />;
-      default:
-        return <Dashboard />;
-    }
+    const pageVariants = {
+      initial: { opacity: 0, y: 20 },
+      animate: { opacity: 1, y: 0 },
+      exit: { opacity: 0, y: -20 }
+    };
+
+    const pages = {
+      dashboard: <Dashboard />,
+      customers: <Customers />,
+      packages: <Packages />,
+      invoices: <Invoices />,
+      payments: <Payments />
+    };
+
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeMenu}
+          variants={pageVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={{ duration: 0.3 }}
+        >
+          {pages[activeMenu]}
+        </motion.div>
+      </AnimatePresence>
+    );
   };
 
   return (
-    <div className="app">
-      <nav className="sidebar">
-        <div className="logo">
-          <h2>🌐 ISP Billing</h2>
-          <p>Management System</p>
-        </div>
-        <ul className="menu">
-          {menuItems.map((item) => (
-            <li 
-              key={item.id}
-              className={activeMenu === item.id ? 'active' : ''}
-              onClick={() => setActiveMenu(item.id)}
-              onMouseEnter={() => setHoveredMenu(item.id)}
-              onMouseLeave={() => setHoveredMenu(null)}
-              style={{ position: 'relative' }}
-            >
-              <span className="icon">{item.icon}</span>
-              <span>{item.label}</span>
-              
-              {/* Tooltip */}
-              {hoveredMenu === item.id && activeMenu !== item.id && (
-                <div style={{
-                  position: 'absolute',
-                  left: '100%',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  marginLeft: '12px',
-                  padding: '8px 12px',
-                  background: 'rgba(17, 24, 39, 0.95)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(88, 101, 242, 0.3)',
-                  borderRadius: '8px',
-                  whiteSpace: 'nowrap',
-                  fontSize: '12px',
-                  color: 'rgba(255, 255, 255, 0.9)',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-                  zIndex: 1000,
-                  pointerEvents: 'none',
-                  animation: 'fadeIn 0.2s ease'
-                }}>
-                  {item.description}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-        <div className="sidebar-footer">
-          <p>© 2024 ISP Billing</p>
-          <p>v1.0.0</p>
-        </div>
-      </nav>
-      <main className="main-content">
-        <header className="header">
-          <h1>{menuItems.find(m => m.id === activeMenu)?.label || 'Dashboard'}</h1>
-          <div className="user-info">
-            <span>Admin User</span>
-            <div className="avatar">A</div>
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* Background Effects */}
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent pointer-events-none" />
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-purple-900/20 via-transparent to-transparent pointer-events-none" />
+      
+      {/* Sidebar */}
+      <Sidebar 
+        activeMenu={activeMenu} 
+        setActiveMenu={setActiveMenu}
+        sidebarOpen={sidebarOpen}
+      />
+      
+      {/* Main Content */}
+      <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
+        <Header 
+          activeMenu={activeMenu}
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+        />
+        
+        <main className="flex-1 p-6 lg:p-8 custom-scrollbar overflow-y-auto">
+          <div className="max-w-7xl mx-auto">
+            {renderContent()}
           </div>
-        </header>
-        <div className="content">
-          {renderContent()}
-        </div>
-      </main>
+        </main>
+      </div>
+
+      {/* Toast Notifications */}
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: 'rgba(15, 23, 42, 0.95)',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            backdropFilter: 'blur(10px)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
     </div>
   );
 }

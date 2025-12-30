@@ -18,18 +18,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   backend:
-    build: ./backend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: isp_backend
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ispuser
       DB_PASSWORD: isppass123
       DB_NAME: ispbilling
       PORT: 5000
+      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     ports:
       - "5000:5000"
     depends_on:
@@ -40,12 +44,19 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+    restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
     container_name: isp_frontend
     environment:
-      VITE_API_URL: http://103.31.204.245:5000/api
+      VITE_API_URL: http://localhost:5000/api
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
     depends_on:
@@ -55,9 +66,14 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - /app/dist
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
 
 volumes:
   postgres_data:
+    driver: local
 
 networks:
   isp_network:

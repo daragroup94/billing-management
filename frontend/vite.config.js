@@ -6,8 +6,16 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
-    watch: {
-      usePolling: true
+    proxy: {
+      '/api': {
+        target: 'http://isp_backend:5000',
+        changeOrigin: true,
+      }
+    }
+  },
+  resolve: {
+    alias: {
+      '@': '/src'
     }
   }
 })

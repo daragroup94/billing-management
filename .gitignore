@@ -1,22 +1,55 @@
 # Node
 node_modules/
 npm-debug.log*
+yarn-error.log*
 yarn.lock
 pnpm-lock.yaml
+package-lock.json
 
 # Env
 .env
 .env.*
+!.env.example
 
 # Build
 dist/
 build/
 .next/
 out/
+*.tsbuildinfo
 
 # Docker
 *.log
+docker-compose.override.yml
 
 # OS
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Tailwind
+.tailwindcss
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database
+*.sqlite
+*.db
+
+# Backup
+backup/
