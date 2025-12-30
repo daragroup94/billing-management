@@ -57,3 +57,45 @@ CREATE TABLE IF NOT EXISTS payments (
 
 -- NO MOCK DATA - Clean Start
 -- Users can add their own data through the application
+-- Users Table untuk Authentication
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    full_name VARCHAR(255),
+    role VARCHAR(50) DEFAULT 'user',
+    status VARCHAR(50) DEFAULT 'active',
+    last_login TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default admin user
+-- Password: daragroup1994 (akan di-hash di aplikasi)
+INSERT INTO users (username, password, email, full_name, role, status) 
+VALUES (
+    'admin', 
+    '$2a$10$rQH5H5qJ5PxJZGKg5yYJ8.xK7qVXJ9RQH5H5qJ5PxJZGKg5yYJ8.u', 
+    'admin@ispbilling.com', 
+    'Administrator', 
+    'admin', 
+    'active'
+) ON CONFLICT (username) DO NOTHING;
+
+-- Sessions Table untuk tracking login
+CREATE TABLE IF NOT EXISTS sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    token VARCHAR(500) UNIQUE NOT NULL,
+    ip_address VARCHAR(50),
+    user_agent TEXT,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index untuk performa
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from './context/AuthContext';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './pages/Dashboard';
@@ -11,8 +12,14 @@ import Payments from './pages/Payments';
 import Settings from './pages/Settings';
 
 function App() {
+  const { isAuthenticated } = useAuth();
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Jika tidak authenticated, AuthContext akan redirect ke login
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const renderContent = () => {
     const pageVariants = {

@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -17,6 +20,28 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
+// Make pool available to routes
+app.locals.pool = pool;
+
+// Security middleware
+app.use(helmet());
+
+// Rate limiting - RELAXED untuk development
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 1000 untuk dev
+  message: 'Too many requests, please try again later'
+});
+app.use('/api/', limiter);
+
+// Auth rate limit - LEBIH RELAXED
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 100 untuk dev
+  message: 'Too many login attempts, please try again later',
+  skipSuccessfulRequests: true // Skip counting untuk login sukses
+});
+
 // Enhanced CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
@@ -24,13 +49,12 @@ const corsOptions = {
       ? process.env.ALLOWED_ORIGINS.split(',')
       : ['http://localhost:3000', 'http://127.0.0.1:3000'];
     
-    // Allow requests with no origin (mobile apps, Postman, etc)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(null, true); // For development, allow all. Change in production!
+      callback(null, true); // For development
     }
   },
   credentials: true,
@@ -52,6 +76,12 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+// Import middleware
+const { authenticateToken, requireAdmin } = require('./middleware/auth');
+
+// Import routes
+const authRoutes = require('./routes/auth');
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ 
@@ -72,10 +102,13 @@ app.get('/health/db', asyncHandler(async (req, res) => {
   });
 }));
 
-// ==================== DASHBOARD ====================
+// ==================== AUTH ROUTES (PUBLIC) ====================
+app.use('/api/auth', authLimiter, authRoutes);
 
-// Dashboard Statistics
-app.get('/api/dashboard/stats', asyncHandler(async (req, res) => {
+// ==================== PROTECTED ROUTES ====================
+
+// ==================== DASHBOARD ====================
+app.get('/api/dashboard/stats', authenticateToken, asyncHandler(async (req, res) => {
   const [totalCustomers, totalRevenue, pendingInvoices, totalPackages] = await Promise.all([
     pool.query('SELECT COUNT(*) FROM customers WHERE status = $1', ['active']),
     pool.query('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE EXTRACT(MONTH FROM payment_date) = EXTRACT(MONTH FROM CURRENT_DATE)'),
@@ -91,8 +124,7 @@ app.get('/api/dashboard/stats', asyncHandler(async (req, res) => {
   });
 }));
 
-// Revenue Chart Data (Last 6 months)
-app.get('/api/dashboard/revenue-chart', asyncHandler(async (req, res) => {
+app.get('/api/dashboard/revenue-chart', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
     SELECT 
       TO_CHAR(payment_date, 'Mon YYYY') as month,
@@ -106,8 +138,7 @@ app.get('/api/dashboard/revenue-chart', asyncHandler(async (req, res) => {
   res.json(result.rows);
 }));
 
-// Customer Growth Chart
-app.get('/api/dashboard/customer-growth', asyncHandler(async (req, res) => {
+app.get('/api/dashboard/customer-growth', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
     SELECT 
       TO_CHAR(created_at, 'Mon YY') as month,
@@ -120,8 +151,7 @@ app.get('/api/dashboard/customer-growth', asyncHandler(async (req, res) => {
   res.json(result.rows);
 }));
 
-// Package Distribution
-app.get('/api/dashboard/package-distribution', asyncHandler(async (req, res) => {
+app.get('/api/dashboard/package-distribution', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
     SELECT 
       p.name,
@@ -136,8 +166,7 @@ app.get('/api/dashboard/package-distribution', asyncHandler(async (req, res) => 
   res.json(result.rows);
 }));
 
-// Recent Activity
-app.get('/api/dashboard/recent-activity', asyncHandler(async (req, res) => {
+app.get('/api/dashboard/recent-activity', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
     (SELECT 
       'payment' as type,
@@ -170,8 +199,7 @@ app.get('/api/dashboard/recent-activity', asyncHandler(async (req, res) => {
 }));
 
 // ==================== CUSTOMERS CRUD ====================
-
-app.get('/api/customers', asyncHandler(async (req, res) => {
+app.get('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
   const { search, status, limit = 100, offset = 0 } = req.query;
   
   let query = 'SELECT * FROM customers WHERE 1=1';
@@ -204,10 +232,9 @@ app.get('/api/customers', asyncHandler(async (req, res) => {
   });
 }));
 
-app.post('/api/customers', asyncHandler(async (req, res) => {
+app.post('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
   const { name, email, phone, address, installation_address } = req.body;
   
-  // Validation
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required' });
   }
@@ -223,7 +250,7 @@ app.post('/api/customers', asyncHandler(async (req, res) => {
   });
 }));
 
-app.put('/api/customers/:id', asyncHandler(async (req, res) => {
+app.put('/api/customers/:id', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, email, phone, address, installation_address, status } = req.body;
   
@@ -245,7 +272,7 @@ app.put('/api/customers/:id', asyncHandler(async (req, res) => {
   });
 }));
 
-app.delete('/api/customers/:id', asyncHandler(async (req, res) => {
+app.delete('/api/customers/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   
   const result = await pool.query('DELETE FROM customers WHERE id=$1 RETURNING id', [id]);
@@ -261,8 +288,7 @@ app.delete('/api/customers/:id', asyncHandler(async (req, res) => {
 }));
 
 // ==================== PACKAGES CRUD ====================
-
-app.get('/api/packages', asyncHandler(async (req, res) => {
+app.get('/api/packages', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
     SELECT p.*, 
            COUNT(s.id) as subscriber_count
@@ -274,7 +300,7 @@ app.get('/api/packages', asyncHandler(async (req, res) => {
   res.json(result.rows);
 }));
 
-app.post('/api/packages', asyncHandler(async (req, res) => {
+app.post('/api/packages', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { name, speed, price, description } = req.body;
   
   if (!name || !speed || !price) {
@@ -292,7 +318,7 @@ app.post('/api/packages', asyncHandler(async (req, res) => {
   });
 }));
 
-app.put('/api/packages/:id', asyncHandler(async (req, res) => {
+app.put('/api/packages/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, speed, price, description, status } = req.body;
   
@@ -311,7 +337,7 @@ app.put('/api/packages/:id', asyncHandler(async (req, res) => {
   });
 }));
 
-app.delete('/api/packages/:id', asyncHandler(async (req, res) => {
+app.delete('/api/packages/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   
   const result = await pool.query('DELETE FROM packages WHERE id=$1 RETURNING id', [id]);
@@ -327,8 +353,7 @@ app.delete('/api/packages/:id', asyncHandler(async (req, res) => {
 }));
 
 // ==================== INVOICES ====================
-
-app.get('/api/invoices', asyncHandler(async (req, res) => {
+app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
   const { status, customer_id, limit = 100, offset = 0 } = req.query;
   
   let query = `
@@ -365,7 +390,7 @@ app.get('/api/invoices', asyncHandler(async (req, res) => {
   res.json(result.rows);
 }));
 
-app.post('/api/invoices/create', asyncHandler(async (req, res) => {
+app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res) => {
   const { customer_id, package_id, invoice_number, amount, due_date } = req.body;
   
   if (!customer_id || !package_id || !invoice_number || !amount || !due_date) {
@@ -377,7 +402,6 @@ app.post('/api/invoices/create', asyncHandler(async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    // Create or get subscription
     let subscription = await client.query(
       'SELECT id FROM subscriptions WHERE customer_id = $1 AND package_id = $2 AND status = $3',
       [customer_id, package_id, 'active']
@@ -394,7 +418,6 @@ app.post('/api/invoices/create', asyncHandler(async (req, res) => {
       subscription_id = subscription.rows[0].id;
     }
     
-    // Create invoice
     const invoice = await client.query(
       'INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [customer_id, subscription_id, invoice_number, amount, due_date, 'unpaid']
@@ -414,7 +437,7 @@ app.post('/api/invoices/create', asyncHandler(async (req, res) => {
   }
 }));
 
-app.put('/api/invoices/:id/status', asyncHandler(async (req, res) => {
+app.put('/api/invoices/:id/status', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   
@@ -433,7 +456,7 @@ app.put('/api/invoices/:id/status', asyncHandler(async (req, res) => {
   });
 }));
 
-app.delete('/api/invoices/:id', asyncHandler(async (req, res) => {
+app.delete('/api/invoices/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   
   const result = await pool.query('DELETE FROM invoices WHERE id=$1 RETURNING id', [id]);
@@ -449,8 +472,7 @@ app.delete('/api/invoices/:id', asyncHandler(async (req, res) => {
 }));
 
 // ==================== PAYMENTS ====================
-
-app.get('/api/payments', asyncHandler(async (req, res) => {
+app.get('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
     SELECT p.*, 
            i.invoice_number, 
@@ -464,7 +486,7 @@ app.get('/api/payments', asyncHandler(async (req, res) => {
   res.json(result.rows);
 }));
 
-app.post('/api/payments', asyncHandler(async (req, res) => {
+app.post('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
   const { invoice_id, amount, payment_method, notes } = req.body;
   
   if (!invoice_id || !amount || !payment_method) {
@@ -501,8 +523,6 @@ app.post('/api/payments', asyncHandler(async (req, res) => {
 }));
 
 // ==================== ERROR HANDLING ====================
-
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ 
     error: 'Not Found',
@@ -510,7 +530,6 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err);
   
@@ -520,21 +539,106 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ==================== START SERVER ====================
+// ==================== INITIALIZE DATABASE ====================
+async function initializeDatabase() {
+  const client = await pool.connect();
+  try {
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'users'
+      );
+    `);
 
-app.listen(PORT, () => {
+    if (!tableCheck.rows[0].exists) {
+      console.log('🔧 Creating users table...');
+      
+      await client.query(`
+        CREATE TABLE users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(100) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          full_name VARCHAR(255),
+          role VARCHAR(50) DEFAULT 'user',
+          status VARCHAR(50) DEFAULT 'active',
+          last_login TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await client.query(`
+        CREATE TABLE sessions (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          token VARCHAR(500) UNIQUE NOT NULL,
+          ip_address VARCHAR(50),
+          user_agent TEXT,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await client.query('CREATE INDEX idx_sessions_token ON sessions(token);');
+      await client.query('CREATE INDEX idx_sessions_user_id ON sessions(user_id);');
+      await client.query('CREATE INDEX idx_users_username ON users(username);');
+      await client.query('CREATE INDEX idx_users_email ON users(email);');
+
+      // Hash password: daragroup1994
+      const hashedPassword = await bcrypt.hash('daragroup1994', 10);
+      console.log('🔐 Generated password hash:', hashedPassword);
+
+      await client.query(`
+        INSERT INTO users (username, password, email, full_name, role, status) 
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, ['admin', hashedPassword, 'admin@ispbilling.com', 'Administrator', 'admin', 'active']);
+
+      console.log('✅ Database initialized successfully!');
+      console.log('👤 Admin user created:');
+      console.log('   Username: admin');
+      console.log('   Password: daragroup1994');
+    } else {
+      console.log('✅ Database tables already exist');
+      
+      // Verify admin user exists
+      const adminCheck = await client.query('SELECT username FROM users WHERE username = $1', ['admin']);
+      if (adminCheck.rows.length > 0) {
+        console.log('✅ Admin user verified');
+      } else {
+        console.log('⚠️  Admin user not found, recreating...');
+        const hashedPassword = await bcrypt.hash('daragroup1994', 10);
+        await client.query(`
+          INSERT INTO users (username, password, email, full_name, role, status) 
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password
+        `, ['admin', hashedPassword, 'admin@ispbilling.com', 'Administrator', 'admin', 'active']);
+        console.log('✅ Admin user recreated');
+      }
+    }
+  } catch (error) {
+    console.error('❌ Database initialization error:', error);
+  } finally {
+    client.release();
+  }
+}
+
+// ==================== START SERVER ====================
+app.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════╗
-║  🚀 ISP Billing API Server v2.0                      ║
+║  🚀 ISP Billing API Server v2.0 with Auth           ║
 ║  📡 Running on: http://localhost:${PORT}                ║
 ║  🌍 Environment: ${process.env.NODE_ENV || 'development'}              ║
 ║  💾 Database: ${process.env.DB_NAME || 'ispbilling'}                  ║
+║  🔐 Authentication: Enabled                          ║
 ║  ⏰ Started: ${new Date().toISOString()}              ║
 ╚═══════════════════════════════════════════════════════╝
   `);
+  
+  await initializeDatabase();
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, closing server...');
   pool.end();

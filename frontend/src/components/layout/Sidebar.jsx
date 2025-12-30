@@ -7,10 +7,14 @@ import {
   CreditCard,
   Settings,
   LogOut,
-  Bell
+  Shield
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 
 export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
+  const { user, logout } = useAuth();
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers', label: 'Customers', icon: Users },
@@ -19,10 +23,10 @@ export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
     { id: 'payments', label: 'Payments', icon: CreditCard },
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (confirm('Are you sure you want to logout?')) {
-      // Add logout logic here
-      alert('Logout functionality will be implemented');
+      await logout();
+      toast.success('Logged out successfully');
     }
   };
 
@@ -38,6 +42,26 @@ export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
         <div className="mb-8">
           <h1 className="text-2xl font-bold gradient-text">ISP Billing</h1>
           <p className="text-sm text-slate-400 mt-1">Management System</p>
+        </div>
+
+        {/* User Info */}
+        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
+              {user?.username?.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate">
+                {user?.full_name || user?.username}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Shield size={12} className="text-blue-400" />
+                <p className="text-xs text-slate-400 capitalize">
+                  {user?.role}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Menu Items */}
@@ -70,7 +94,7 @@ export default function Sidebar({ activeMenu, setActiveMenu, sidebarOpen }) {
 
         {/* Bottom Section - Settings & Logout */}
         <div className="space-y-2 pt-6 border-t border-white/10">
-          {/* Settings Button - NOW FUNCTIONAL */}
+          {/* Settings Button */}
           <motion.button
             whileHover={{ x: 4 }}
             whileTap={{ scale: 0.98 }}
