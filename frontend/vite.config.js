@@ -6,6 +6,13 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
+    allowedHosts: [
+      'billing.access.daragroup.cloud',
+      // Opsional: tambahin ini biar lebih fleksibel
+      '.daragroup.cloud',  // allow semua subdomain daragroup.cloud
+      'localhost',
+      '127.0.0.1'
+    ],
     proxy: {
       '/api': {
         target: 'http://backend:5000',

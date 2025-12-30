@@ -13,7 +13,7 @@ const Dashboard = () => {
     totalPackages: 0
   });
   const [recentActivity, setRecentActivity] = useState([]);
-  const [overdueCustomers, setOverdueCustomers] = useState([]);
+  const [overdueInvoices, setOverdueInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Chart data
@@ -23,18 +23,21 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    // Auto refresh setiap 30 detik untuk update overdue
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, activityData, revenueChart, customerGrowth, packageDist, invoicesData] = await Promise.all([
+      const [statsData, activityData, revenueChart, customerGrowth, packageDist, allInvoices] = await Promise.all([
         dashboardAPI.getStats(),
         dashboardAPI.getRecentActivity(),
         dashboardAPI.getRevenueChart(),
         dashboardAPI.getCustomerGrowth(),
         dashboardAPI.getPackageDistribution(),
-        invoicesAPI.getAll({ status: 'unpaid' })
+        invoicesAPI.getAll() // Ambil SEMUA invoice untuk filter manual
       ]);
       
       setStats(statsData);
@@ -43,16 +46,36 @@ const Dashboard = () => {
       setCustomerGrowthData(customerGrowth);
       setPackageDistData(packageDist);
       
-      // Filter overdue invoices
-      const overdue = invoicesData.filter(inv => {
+      // Filter overdue invoices SECARA MANUAL
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set ke midnight untuk perbandingan yang akurat
+      
+      const overdue = allInvoices.filter(inv => {
+        // Hanya invoice yang status unpaid
+        if (inv.status !== 'unpaid') return false;
+        
+        // Parse due_date dan set ke midnight
         const dueDate = new Date(inv.due_date);
-        return dueDate < new Date();
+        dueDate.setHours(0, 0, 0, 0);
+        
+        // Invoice overdue jika due_date < today
+        return dueDate < today;
       });
-      setOverdueCustomers(overdue);
+
+      // Sort by overdue days (paling lama di atas)
+      overdue.sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+      
+      setOverdueInvoices(overdue);
+      
+      console.log('📊 Dashboard Data Loaded:');
+      console.log('Total Invoices:', allInvoices.length);
+      console.log('Unpaid Invoices:', allInvoices.filter(i => i.status === 'unpaid').length);
+      console.log('Overdue Invoices:', overdue.length);
+      console.log('Today:', today.toLocaleDateString('id-ID'));
       
     } catch (error) {
       toast.error('Failed to fetch dashboard data');
-      console.error(error);
+      console.error('Dashboard fetch error:', error);
     } finally {
       setLoading(false);
     }
@@ -71,6 +94,16 @@ const Dashboard = () => {
       return `Rp ${(value / 1000000).toFixed(1)}M`;
     }
     return `Rp ${(value / 1000).toFixed(0)}K`;
+  };
+
+  const calculateOverdueDays = (dueDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    const diffTime = today - due;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
   };
 
   // Colors for charts
@@ -136,6 +169,42 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Overdue Alert Banner - Tampilkan jika ada overdue */}
+      {overdueInvoices.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card bg-gradient-to-r from-red-500/20 to-orange-500/20 border-2 border-red-500/50"
+        >
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-red-500/20 animate-pulse">
+              <AlertCircle className="text-red-400" size={28} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-red-400 mb-2">
+                ⚠️ Perhatian: {overdueInvoices.length} Invoice Terlambat!
+              </h3>
+              <p className="text-slate-300 mb-3">
+                Ada {overdueInvoices.length} pelanggan dengan pembayaran yang sudah melewati jatuh tempo. 
+                Segera lakukan penagihan untuk menghindari tunggakan lebih lanjut.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                {overdueInvoices.slice(0, 3).map((inv) => (
+                  <span key={inv.id} className="badge badge-danger">
+                    {inv.customer_name} - {calculateOverdueDays(inv.due_date)} hari
+                  </span>
+                ))}
+                {overdueInvoices.length > 3 && (
+                  <span className="badge bg-red-500/30 text-red-300">
+                    +{overdueInvoices.length - 3} lainnya
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, index) => {
@@ -283,27 +352,33 @@ const Dashboard = () => {
           </ResponsiveContainer>
         </motion.div>
 
-        {/* Pelanggan Nunggak - REPLACEMENT FOR QUICK ACTIONS */}
+        {/* Pelanggan Nunggak */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
           className="card"
         >
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            <AlertCircle className="text-red-500" size={20} />
-            Pelanggan Nunggak ({overdueCustomers.length})
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <AlertCircle className="text-red-500" size={20} />
+              Pelanggan Nunggak
+            </h3>
+            <span className={`badge ${overdueInvoices.length > 0 ? 'badge-danger' : 'badge-success'}`}>
+              {overdueInvoices.length} Invoice
+            </span>
+          </div>
+          
           <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
-            {overdueCustomers.length === 0 ? (
+            {overdueInvoices.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-3">✅</div>
-                <p className="text-slate-400">Tidak ada pelanggan nunggak!</p>
+                <p className="text-slate-400 font-semibold">Tidak ada pelanggan nunggak!</p>
                 <p className="text-sm text-slate-500 mt-2">Semua pembayaran tepat waktu</p>
               </div>
             ) : (
-              overdueCustomers.map((invoice, index) => {
-                const daysOverdue = Math.floor((new Date() - new Date(invoice.due_date)) / (1000 * 60 * 60 * 24));
+              overdueInvoices.map((invoice, index) => {
+                const daysOverdue = calculateOverdueDays(invoice.due_date);
                 return (
                   <motion.div
                     key={invoice.id}
@@ -317,13 +392,13 @@ const Dashboard = () => {
                         <p className="text-white font-semibold">{invoice.customer_name}</p>
                         <p className="text-xs text-slate-400">{invoice.email}</p>
                       </div>
-                      <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded-full">
+                      <span className="px-3 py-1 bg-red-500/30 text-red-300 text-xs font-bold rounded-full animate-pulse">
                         {daysOverdue} hari
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-red-500/20">
                       <div className="text-xs text-slate-400">
-                        <p>Invoice: {invoice.invoice_number}</p>
+                        <p className="font-mono">{invoice.invoice_number}</p>
                         <p>Jatuh tempo: {new Date(invoice.due_date).toLocaleDateString('id-ID')}</p>
                       </div>
                       <div className="text-right">

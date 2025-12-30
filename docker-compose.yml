@@ -12,7 +12,8 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - isp_network
+      my-net:
+        ipv4_address: 10.0.0.6
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ispuser -d ispbilling"]
       interval: 10s
@@ -40,7 +41,8 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - isp_network
+      my-net:
+        ipv4_address: 10.0.0.5
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -59,10 +61,27 @@ services:
       WATCHPACK_POLLING: "true"
     ports:
       - "3000:3000"
+    labels:
+      - "traefik.enable=true"
+      # HTTP (Redirect to HTTPS)
+      - "traefik.http.routers.billing.entrypoints=web"
+      - "traefik.http.routers.billing.rule=Host(`billing.access.daragroup.cloud`)"
+      - "traefik.http.routers.billing.middlewares=billing-https-redirect"
+      - "traefik.http.middlewares.billing-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.billing-https-redirect.redirectscheme.permanent=true"
+      # HTTPS (Secure)
+      - "traefik.http.routers.billing-secure.entrypoints=websecure"
+      - "traefik.http.routers.billing-secure.rule=Host(`billing.access.daragroup.cloud`)"
+      - "traefik.http.routers.billing-secure.tls=true"
+      - "traefik.http.routers.billing-secure.tls.certresolver=cloudflare"
+      - "traefik.http.routers.billing-secure.service=billing-service"
+      # Service Configuration
+      - "traefik.http.services.billing-service.loadbalancer.server.port=3000"
     depends_on:
       - backend
     networks:
-      - isp_network
+      my-net:
+        ipv4_address: 10.0.0.4
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -76,5 +95,6 @@ volumes:
     driver: local
 
 networks:
-  isp_network:
-    driver: bridge
+  my-net:
+    external: true
+    name: my-net
