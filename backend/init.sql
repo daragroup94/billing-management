@@ -55,8 +55,6 @@ CREATE TABLE IF NOT EXISTS payments (
     notes TEXT
 );
 
--- NO MOCK DATA - Clean Start
--- Users can add their own data through the application
 -- Users Table untuk Authentication
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -94,8 +92,67 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Settings Table untuk menyimpan konfigurasi sistem
+CREATE TABLE IF NOT EXISTS settings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    setting_key VARCHAR(100) NOT NULL,
+    setting_value JSONB NOT NULL,
+    setting_type VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, setting_key)
+);
+
 -- Index untuk performa
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_settings_user_id ON settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(setting_key);
+CREATE INDEX IF NOT EXISTS idx_settings_type ON settings(setting_type);
+
+-- Function untuk auto-update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger untuk auto-update updated_at pada settings
+DROP TRIGGER IF EXISTS update_settings_updated_at ON settings;
+CREATE TRIGGER update_settings_updated_at
+    BEFORE UPDATE ON settings
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Insert default settings untuk admin user
+INSERT INTO settings (user_id, setting_key, setting_value, setting_type)
+SELECT 
+    id,
+    'general_settings',
+    '{"companyName":"ISP Billing Co.","companyEmail":"admin@ispbilling.com","companyPhone":"+62 812 3456 7890","companyAddress":"Jl. Teknologi No. 123, Jakarta","currency":"IDR","timezone":"Asia/Jakarta","language":"id","dateFormat":"DD/MM/YYYY","timeFormat":"24h"}'::jsonb,
+    'general'
+FROM users WHERE username = 'admin'
+ON CONFLICT (user_id, setting_key) DO NOTHING;
+
+INSERT INTO settings (user_id, setting_key, setting_value, setting_type)
+SELECT 
+    id,
+    'notification_settings',
+    '{"emailNotifications":true,"smsNotifications":false,"pushNotifications":true,"overdueReminders":true,"paymentConfirmations":true,"newCustomerAlerts":true,"invoiceGeneration":true,"systemUpdates":false}'::jsonb,
+    'notifications'
+FROM users WHERE username = 'admin'
+ON CONFLICT (user_id, setting_key) DO NOTHING;
+
+INSERT INTO settings (user_id, setting_key, setting_value, setting_type)
+SELECT 
+    id,
+    'backup_settings',
+    '{"autoBackup":true,"backupFrequency":"daily","backupTime":"02:00","dataRetention":365,"includeAttachments":true,"compressBackups":true}'::jsonb,
+    'backup'
+FROM users WHERE username = 'admin'
+ON CONFLICT (user_id, setting_key) DO NOTHING;

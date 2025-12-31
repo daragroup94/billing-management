@@ -1,4 +1,4 @@
-import api from './client'; // Menggunakan axios instance yang sudah ada tokennya
+import api from './client';
 
 export const dashboardAPI = {
   getStats: () => 
@@ -51,4 +51,21 @@ export const paymentsAPI = {
     api.get('/payments').then(res => res.data),
   create: (data) =>
     api.post('/payments', data).then(res => res.data),
+};
+
+export const settingsAPI = {
+  getAll: () => 
+    api.get('/settings').then(res => res.data),
+  get: (key) => 
+    api.get(`/settings/${key}`).then(res => res.data),
+  update: (key, value, type) =>
+    api.put(`/settings/${key}`, { value, type }).then(res => res.data),
+  delete: (key) =>
+    api.delete(`/settings/${key}`).then(res => res.data),
+  reset: () =>
+    api.post('/settings/reset').then(res => res.data),
+  exportBackup: () =>
+    api.get('/settings/export/backup').then(res => res.data),
+  importRestore: (backup) =>
+    api.post('/settings/import/restore', { backup }).then(res => res.data)
 };

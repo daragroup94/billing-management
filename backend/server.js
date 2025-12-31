@@ -23,6 +23,9 @@ const pool = new Pool({
 // Make pool available to routes
 app.locals.pool = pool;
 
+// Trust proxy - FIX untuk error X-Forwarded-For
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 
@@ -45,15 +48,16 @@ const authLimiter = rateLimit({
 // Enhanced CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',')
       : ['http://localhost:3000', 'http://127.0.0.1:3000'];
-    
+   
     if (!origin) return callback(null, true);
-    
+   
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      // Di production bisa diganti jadi callback(new Error('Not allowed by CORS'))
       callback(null, true); // For development
     }
   },
@@ -81,11 +85,12 @@ const { authenticateToken, requireAdmin } = require('./middleware/auth');
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const settingsRoutes = require('./routes/settings'); // ← TAMBAH INI
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'ISP Billing API',
     version: '2.0.0'
@@ -95,8 +100,8 @@ app.get('/health', (req, res) => {
 // Database health check
 app.get('/health/db', asyncHandler(async (req, res) => {
   const result = await pool.query('SELECT NOW()');
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: result.rows[0].now,
     database: 'Connected'
   });
@@ -104,15 +109,31 @@ app.get('/health/db', asyncHandler(async (req, res) => {
 
 // ==================== AUTH ROUTES (PUBLIC) ====================
 app.use('/api/auth', authLimiter, authRoutes);
-
-// ==================== PROTECTED ROUTES ====================
+// ==================== SETTINGS ROUTES (PROTECTED) ====================
+app.use('/api/settings', authenticateToken, settingsRoutes); // ← TAMBAH INI
 
 // ==================== DASHBOARD ====================
 app.get('/api/dashboard/stats', authenticateToken, asyncHandler(async (req, res) => {
-  const [totalCustomers, totalRevenue, pendingInvoices, totalPackages] = await Promise.all([
+  const [
+    totalCustomers,
+    totalRevenue,
+    pendingInvoices,
+    overdueInvoices,
+    totalPackages
+  ] = await Promise.all([
     pool.query('SELECT COUNT(*) FROM customers WHERE status = $1', ['active']),
-    pool.query('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE EXTRACT(MONTH FROM payment_date) = EXTRACT(MONTH FROM CURRENT_DATE)'),
+    pool.query(`
+      SELECT COALESCE(SUM(amount), 0) as total 
+      FROM payments 
+      WHERE EXTRACT(MONTH FROM payment_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM payment_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+    `),
     pool.query('SELECT COUNT(*) FROM invoices WHERE status = $1', ['unpaid']),
+    pool.query(`
+      SELECT COUNT(*) 
+      FROM invoices 
+      WHERE status = 'unpaid' AND due_date < CURRENT_DATE
+    `),
     pool.query('SELECT COUNT(*) FROM packages WHERE status = $1', ['active'])
   ]);
 
@@ -120,13 +141,14 @@ app.get('/api/dashboard/stats', authenticateToken, asyncHandler(async (req, res)
     totalCustomers: parseInt(totalCustomers.rows[0].count),
     monthlyRevenue: parseFloat(totalRevenue.rows[0].total),
     pendingInvoices: parseInt(pendingInvoices.rows[0].count),
+    overdueInvoices: parseInt(overdueInvoices.rows[0].count),
     totalPackages: parseInt(totalPackages.rows[0].count)
   });
 }));
 
 app.get('/api/dashboard/revenue-chart', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    SELECT 
+    SELECT
       TO_CHAR(payment_date, 'Mon YYYY') as month,
       SUM(amount) as revenue,
       COUNT(*) as count
@@ -140,7 +162,7 @@ app.get('/api/dashboard/revenue-chart', authenticateToken, asyncHandler(async (r
 
 app.get('/api/dashboard/customer-growth', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    SELECT 
+    SELECT
       TO_CHAR(created_at, 'Mon YY') as month,
       COUNT(*) as customers
     FROM customers
@@ -153,7 +175,7 @@ app.get('/api/dashboard/customer-growth', authenticateToken, asyncHandler(async 
 
 app.get('/api/dashboard/package-distribution', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    SELECT 
+    SELECT
       p.name,
       p.speed,
       COUNT(s.id) as count,
@@ -168,7 +190,7 @@ app.get('/api/dashboard/package-distribution', authenticateToken, asyncHandler(a
 
 app.get('/api/dashboard/recent-activity', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    (SELECT 
+    (SELECT
       'payment' as type,
       c.name as customer_name,
       p.amount,
@@ -183,7 +205,7 @@ app.get('/api/dashboard/recent-activity', authenticateToken, asyncHandler(async 
     ORDER BY p.payment_date DESC
     LIMIT 5)
     UNION ALL
-    (SELECT 
+    (SELECT
       'customer' as type,
       name as customer_name,
       0 as amount,
@@ -198,32 +220,60 @@ app.get('/api/dashboard/recent-activity', authenticateToken, asyncHandler(async 
   res.json(result.rows);
 }));
 
+// ==================== OVERDUE INVOICES ====================
+app.get('/api/invoices/overdue', authenticateToken, asyncHandler(async (req, res) => {
+  const result = await pool.query(`
+    SELECT 
+      i.id,
+      i.invoice_number,
+      i.amount,
+      i.due_date,
+      i.status,
+      c.id AS customer_id,
+      c.name AS customer_name,
+      c.email,
+      c.phone,
+      p.name AS package_name,
+      (CURRENT_DATE - i.due_date) AS days_overdue
+    FROM invoices i
+    JOIN customers c ON i.customer_id = c.id
+    LEFT JOIN subscriptions s ON i.subscription_id = s.id
+    LEFT JOIN packages p ON s.package_id = p.id
+    WHERE i.status = 'unpaid'
+      AND i.due_date < CURRENT_DATE
+      AND c.status = 'active'
+    ORDER BY i.due_date ASC
+  `);
+
+  res.json({
+    success: true,
+    count: result.rows.length,
+    data: result.rows
+  });
+}));
+
 // ==================== CUSTOMERS CRUD ====================
 app.get('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
   const { search, status, limit = 100, offset = 0 } = req.query;
-  
+ 
   let query = 'SELECT * FROM customers WHERE 1=1';
   let params = [];
   let paramCount = 1;
-
   if (search) {
     query += ` AND (name ILIKE $${paramCount} OR email ILIKE $${paramCount} OR phone ILIKE $${paramCount})`;
     params.push(`%${search}%`);
     paramCount++;
   }
-
   if (status) {
     query += ` AND status = $${paramCount}`;
     params.push(status);
     paramCount++;
   }
-
   query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
   params.push(limit, offset);
-
   const result = await pool.query(query, params);
   const countResult = await pool.query('SELECT COUNT(*) FROM customers WHERE 1=1');
-  
+ 
   res.json({
     data: result.rows,
     total: parseInt(countResult.rows[0].count),
@@ -234,63 +284,155 @@ app.get('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
 
 app.post('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
   const { name, email, phone, address, installation_address } = req.body;
-  
+ 
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required' });
   }
-
   const result = await pool.query(
-    'INSERT INTO customers (name, email, phone, address, installation_address) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [name, email, phone, address, installation_address]
+    'INSERT INTO customers (name, email, phone, address, installation_address, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [name, email, phone, address, installation_address, 'active']
   );
-  
-  res.status(201).json({ 
+ 
+  res.status(201).json({
     message: 'Customer created successfully',
-    data: result.rows[0] 
+    data: result.rows[0]
   });
 }));
 
 app.put('/api/customers/:id', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, email, phone, address, installation_address, status } = req.body;
-  
+ 
   const result = await pool.query(
-    `UPDATE customers 
-     SET name=$1, email=$2, phone=$3, address=$4, installation_address=$5, status=$6, updated_at=CURRENT_TIMESTAMP 
-     WHERE id=$7 
+    `UPDATE customers
+     SET name=$1, email=$2, phone=$3, address=$4, installation_address=$5, status=$6, updated_at=CURRENT_TIMESTAMP
+     WHERE id=$7
      RETURNING *`,
     [name, email, phone, address, installation_address, status, id]
   );
-  
+ 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Customer not found' });
   }
-  
-  res.json({ 
+ 
+  res.json({
     message: 'Customer updated successfully',
-    data: result.rows[0] 
+    data: result.rows[0]
   });
 }));
 
 app.delete('/api/customers/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  
+ 
   const result = await pool.query('DELETE FROM customers WHERE id=$1 RETURNING id', [id]);
-  
+ 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Customer not found' });
   }
-  
-  res.json({ 
+ 
+  res.json({
     message: 'Customer deleted successfully',
-    id: result.rows[0].id 
+    id: result.rows[0].id
   });
+}));
+
+// ==================== CREATE CUSTOMER WITH SUBSCRIPTION ====================
+app.post('/api/customers/with-subscription', authenticateToken, asyncHandler(async (req, res) => {
+  const { 
+    name, email, phone, address, installation_address,
+    package_id, installation_date, payment_due_day 
+  } = req.body;
+
+  if (!name || !email || !package_id) {
+    return res.status(400).json({ 
+      error: 'Name, email, and package_id are required' 
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Buat customer
+    const customerResult = await client.query(
+      `INSERT INTO customers (name, email, phone, address, installation_address, status)
+       VALUES ($1, $2, $3, $4, $5, 'active') RETURNING *`,
+      [name, email, phone, address || null, installation_address || null]
+    );
+
+    const customerId = customerResult.rows[0].id;
+
+    // 2. Buat subscription
+    const startDate = installation_date || new Date().toISOString().split('T')[0];
+    const dueDay = payment_due_day || 1;
+
+    const subscriptionResult = await client.query(
+      `INSERT INTO subscriptions (customer_id, package_id, start_date, payment_due_day, status)
+       VALUES ($1, $2, $3, $4, 'active') RETURNING *`,
+      [customerId, package_id, startDate, dueDay]
+    );
+
+    const subscriptionId = subscriptionResult.rows[0].id;
+
+    // 3. Hitung tanggal jatuh tempo pertama (bulan depan)
+    const today = new Date();
+    let dueDate = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+    if (dueDate <= today) {
+      dueDate = new Date(today.getFullYear(), today.getMonth() + 2, dueDay);
+    }
+
+    // Update next_due_date di subscription
+    await client.query(
+      `UPDATE subscriptions SET next_due_date = $1 WHERE id = $2`,
+      [dueDate.toISOString().split('T')[0], subscriptionId]
+    );
+
+    // 4. Ambil harga paket
+    const packageResult = await client.query(
+      'SELECT price FROM packages WHERE id = $1 AND status = $2',
+      [package_id, 'active']
+    );
+
+    if (packageResult.rows.length === 0) {
+      throw new Error('Package not found or inactive');
+    }
+
+    const amount = packageResult.rows[0].price;
+
+    // 5. Buat invoice pertama
+    const invoiceNumber = `INV-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}-${String(customerId).padStart(5, '0')}`;
+
+    await client.query(
+      `INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status)
+       VALUES ($1, $2, $3, $4, $5, 'unpaid')`,
+      [customerId, subscriptionId, invoiceNumber, amount, dueDate.toISOString().split('T')[0]]
+    );
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      success: true,
+      message: 'Customer created with subscription and first invoice',
+      data: {
+        customer: customerResult.rows[0],
+        subscription: subscriptionResult.rows[0]
+      }
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating customer with subscription:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
 }));
 
 // ==================== PACKAGES CRUD ====================
 app.get('/api/packages', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    SELECT p.*, 
+    SELECT p.*,
            COUNT(s.id) as subscriber_count
     FROM packages p
     LEFT JOIN subscriptions s ON p.id = s.package_id AND s.status = 'active'
@@ -302,63 +444,63 @@ app.get('/api/packages', authenticateToken, asyncHandler(async (req, res) => {
 
 app.post('/api/packages', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { name, speed, price, description } = req.body;
-  
+ 
   if (!name || !speed || !price) {
     return res.status(400).json({ error: 'Name, speed, and price are required' });
   }
-  
+ 
   const result = await pool.query(
-    'INSERT INTO packages (name, speed, price, description) VALUES ($1, $2, $3, $4) RETURNING *',
-    [name, speed, price, description]
+    'INSERT INTO packages (name, speed, price, description, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [name, speed, price, description, 'active']
   );
-  
-  res.status(201).json({ 
+ 
+  res.status(201).json({
     message: 'Package created successfully',
-    data: result.rows[0] 
+    data: result.rows[0]
   });
 }));
 
 app.put('/api/packages/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, speed, price, description, status } = req.body;
-  
+ 
   const result = await pool.query(
     'UPDATE packages SET name=$1, speed=$2, price=$3, description=$4, status=$5 WHERE id=$6 RETURNING *',
     [name, speed, price, description, status, id]
   );
-  
+ 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Package not found' });
   }
-  
-  res.json({ 
+ 
+  res.json({
     message: 'Package updated successfully',
-    data: result.rows[0] 
+    data: result.rows[0]
   });
 }));
 
 app.delete('/api/packages/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  
+ 
   const result = await pool.query('DELETE FROM packages WHERE id=$1 RETURNING id', [id]);
-  
+ 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Package not found' });
   }
-  
-  res.json({ 
+ 
+  res.json({
     message: 'Package deleted successfully',
-    id: result.rows[0].id 
+    id: result.rows[0].id
   });
 }));
 
 // ==================== INVOICES ====================
 app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
   const { status, customer_id, limit = 100, offset = 0 } = req.query;
-  
+ 
   let query = `
-    SELECT i.*, 
-           c.name as customer_name, 
+    SELECT i.*,
+           c.name as customer_name,
            c.email,
            p.name as package_name
     FROM invoices i
@@ -367,46 +509,41 @@ app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
     LEFT JOIN packages p ON s.package_id = p.id
     WHERE 1=1
   `;
-  
+ 
   let params = [];
   let paramCount = 1;
-
   if (status) {
     query += ` AND i.status = $${paramCount}`;
     params.push(status);
     paramCount++;
   }
-
   if (customer_id) {
     query += ` AND i.customer_id = $${paramCount}`;
     params.push(customer_id);
     paramCount++;
   }
-
   query += ` ORDER BY i.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
   params.push(limit, offset);
-
   const result = await pool.query(query, params);
   res.json(result.rows);
 }));
 
 app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res) => {
   const { customer_id, package_id, invoice_number, amount, due_date } = req.body;
-  
+ 
   if (!customer_id || !package_id || !invoice_number || !amount || !due_date) {
     return res.status(400).json({ error: 'All fields are required' });
   }
-
   const client = await pool.connect();
-  
+ 
   try {
     await client.query('BEGIN');
-    
+   
     let subscription = await client.query(
       'SELECT id FROM subscriptions WHERE customer_id = $1 AND package_id = $2 AND status = $3',
       [customer_id, package_id, 'active']
     );
-    
+   
     let subscription_id;
     if (subscription.rows.length === 0) {
       const newSub = await client.query(
@@ -417,17 +554,17 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
     } else {
       subscription_id = subscription.rows[0].id;
     }
-    
+   
     const invoice = await client.query(
       'INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [customer_id, subscription_id, invoice_number, amount, due_date, 'unpaid']
     );
-    
+   
     await client.query('COMMIT');
-    
-    res.status(201).json({ 
+   
+    res.status(201).json({
       message: 'Invoice created successfully',
-      data: invoice.rows[0] 
+      data: invoice.rows[0]
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -440,42 +577,42 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
 app.put('/api/invoices/:id/status', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
-  
+ 
   const result = await pool.query(
     'UPDATE invoices SET status = $1 WHERE id = $2 RETURNING *',
     [status, id]
   );
-  
+ 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Invoice not found' });
   }
-  
-  res.json({ 
+ 
+  res.json({
     message: 'Invoice status updated successfully',
-    data: result.rows[0] 
+    data: result.rows[0]
   });
 }));
 
 app.delete('/api/invoices/:id', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  
+ 
   const result = await pool.query('DELETE FROM invoices WHERE id=$1 RETURNING id', [id]);
-  
+ 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Invoice not found' });
   }
-  
-  res.json({ 
+ 
+  res.json({
     message: 'Invoice deleted successfully',
-    id: result.rows[0].id 
+    id: result.rows[0].id
   });
 }));
 
 // ==================== PAYMENTS ====================
 app.get('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
   const result = await pool.query(`
-    SELECT p.*, 
-           i.invoice_number, 
+    SELECT p.*,
+           i.invoice_number,
            c.name as customer_name,
            c.email as customer_email
     FROM payments p
@@ -488,31 +625,30 @@ app.get('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
 
 app.post('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
   const { invoice_id, amount, payment_method, notes } = req.body;
-  
+ 
   if (!invoice_id || !amount || !payment_method) {
     return res.status(400).json({ error: 'Invoice ID, amount, and payment method are required' });
   }
-
   const client = await pool.connect();
-  
+ 
   try {
     await client.query('BEGIN');
-    
+   
     const payment = await client.query(
-      'INSERT INTO payments (invoice_id, amount, payment_method, notes) VALUES ($1, $2, $3, $4) RETURNING *',
+      'INSERT INTO payments (invoice_id, amount, payment_method, notes, payment_date) VALUES ($1, $2, $3, $4, CURRENT_DATE) RETURNING *',
       [invoice_id, amount, payment_method, notes]
     );
-    
+   
     await client.query(
       'UPDATE invoices SET status = $1 WHERE id = $2',
       ['paid', invoice_id]
     );
-    
+   
     await client.query('COMMIT');
-    
-    res.status(201).json({ 
+   
+    res.status(201).json({
       message: 'Payment recorded successfully',
-      data: payment.rows[0] 
+      data: payment.rows[0]
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -524,7 +660,7 @@ app.post('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
 
 // ==================== ERROR HANDLING ====================
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Not Found',
     message: `Route ${req.method} ${req.path} not found`
   });
@@ -532,7 +668,7 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  
+ 
   res.status(err.status || 500).json({
     error: err.message || 'Internal Server Error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
@@ -545,14 +681,13 @@ async function initializeDatabase() {
   try {
     const tableCheck = await client.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
+        SELECT FROM information_schema.tables
         WHERE table_name = 'users'
       );
     `);
-
     if (!tableCheck.rows[0].exists) {
       console.log('🔧 Creating users table...');
-      
+     
       await client.query(`
         CREATE TABLE users (
           id SERIAL PRIMARY KEY,
@@ -567,7 +702,6 @@ async function initializeDatabase() {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-
       await client.query(`
         CREATE TABLE sessions (
           id SERIAL PRIMARY KEY,
@@ -579,41 +713,33 @@ async function initializeDatabase() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-
       await client.query('CREATE INDEX idx_sessions_token ON sessions(token);');
       await client.query('CREATE INDEX idx_sessions_user_id ON sessions(user_id);');
       await client.query('CREATE INDEX idx_users_username ON users(username);');
       await client.query('CREATE INDEX idx_users_email ON users(email);');
 
-      // Hash password: daragroup1994
       const hashedPassword = await bcrypt.hash('daragroup1994', 10);
       console.log('🔐 Generated password hash:', hashedPassword);
-
       await client.query(`
-        INSERT INTO users (username, password, email, full_name, role, status) 
+        INSERT INTO users (username, password, email, full_name, role, status)
         VALUES ($1, $2, $3, $4, $5, $6)
       `, ['admin', hashedPassword, 'admin@ispbilling.com', 'Administrator', 'admin', 'active']);
-
       console.log('✅ Database initialized successfully!');
-      console.log('👤 Admin user created:');
-      console.log('   Username: admin');
-      console.log('   Password: daragroup1994');
+      console.log('👤 Admin user created: Username: admin | Password: daragroup1994');
     } else {
       console.log('✅ Database tables already exist');
-      
-      // Verify admin user exists
+     
       const adminCheck = await client.query('SELECT username FROM users WHERE username = $1', ['admin']);
-      if (adminCheck.rows.length > 0) {
-        console.log('✅ Admin user verified');
-      } else {
-        console.log('⚠️  Admin user not found, recreating...');
+      if (adminCheck.rows.length === 0) {
+        console.log('⚠️ Admin user not found, recreating...');
         const hashedPassword = await bcrypt.hash('daragroup1994', 10);
         await client.query(`
-          INSERT INTO users (username, password, email, full_name, role, status) 
+          INSERT INTO users (username, password, email, full_name, role, status)
           VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password
         `, ['admin', hashedPassword, 'admin@ispbilling.com', 'Administrator', 'admin', 'active']);
         console.log('✅ Admin user recreated');
+      } else {
+        console.log('✅ Admin user verified');
       }
     }
   } catch (error) {
@@ -627,15 +753,15 @@ async function initializeDatabase() {
 app.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════╗
-║  🚀 ISP Billing API Server v2.0 with Auth           ║
-║  📡 Running on: http://localhost:${PORT}                ║
-║  🌍 Environment: ${process.env.NODE_ENV || 'development'}              ║
-║  💾 Database: ${process.env.DB_NAME || 'ispbilling'}                  ║
-║  🔐 Authentication: Enabled                          ║
-║  ⏰ Started: ${new Date().toISOString()}              ║
+║ 🚀 ISP Billing API Server v2.1 (with Overdue & Quick Customer) ║
+║ 📡 Running on: http://localhost:${PORT} ║
+║ 🌍 Environment: ${process.env.NODE_ENV || 'development'} ║
+║ 💾 Database: ${process.env.DB_NAME || 'ispbilling'} ║
+║ 🔐 Authentication: Enabled ║
+║ ⏰ Started: ${new Date().toISOString()} ║
 ╚═══════════════════════════════════════════════════════╝
   `);
-  
+ 
   await initializeDatabase();
 });
 
