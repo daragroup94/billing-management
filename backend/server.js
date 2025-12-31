@@ -523,7 +523,12 @@ app.delete('/api/packages/:id', authenticateToken, requireAdmin, asyncHandler(as
   });
 }));
 
-// ==================== INVOICES ====================
+// ================================================
+// UPDATE: backend/server.js - Invoice Routes with Discount
+// Tambahkan/replace bagian INVOICES ROUTES
+// ================================================
+
+// ==================== INVOICES (WITH DISCOUNT SUPPORT) ====================
 app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
   const { status, customer_id, limit = 100, offset = 0 } = req.query;
  
@@ -531,7 +536,10 @@ app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
     SELECT i.*,
            c.name as customer_name,
            c.email,
-           p.name as package_name
+           c.phone as customer_phone,
+           c.address as customer_address,
+           p.name as package_name,
+           p.speed as package_speed
     FROM invoices i
     JOIN customers c ON i.customer_id = c.id
     LEFT JOIN subscriptions s ON i.subscription_id = s.id
@@ -561,10 +569,25 @@ app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res) => {
-  const { customer_id, package_id, invoice_number, amount, due_date } = req.body;
+  const { 
+    customer_id, 
+    package_id, 
+    invoice_number, 
+    amount, 
+    due_date,
+    discount = 0,
+    discount_note = ''
+  } = req.body;
  
   if (!customer_id || !package_id || !invoice_number || !amount || !due_date) {
-    return res.status(400).json({ error: 'All fields are required' });
+    return res.status(400).json({ error: 'All required fields must be provided' });
+  }
+
+  // Calculate final amount after discount
+  const finalAmount = parseFloat(amount) - parseFloat(discount);
+  
+  if (finalAmount < 0) {
+    return res.status(400).json({ error: 'Discount cannot exceed invoice amount' });
   }
   
   const client = await pool.connect();
@@ -572,6 +595,7 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
   try {
     await client.query('BEGIN');
    
+    // Check/Create subscription
     let subscription = await client.query(
       'SELECT id FROM subscriptions WHERE customer_id = $1 AND package_id = $2 AND status = $3',
       [customer_id, package_id, 'active']
@@ -588,9 +612,30 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
       subscription_id = subscription.rows[0].id;
     }
    
+    // Create invoice with discount
     const invoice = await client.query(
-      'INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [customer_id, subscription_id, invoice_number, amount, due_date, 'unpaid']
+      `INSERT INTO invoices (
+        customer_id, 
+        subscription_id, 
+        invoice_number, 
+        amount, 
+        discount,
+        discount_note,
+        final_amount,
+        due_date, 
+        status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        customer_id, 
+        subscription_id, 
+        invoice_number, 
+        amount, 
+        discount,
+        discount_note,
+        finalAmount,
+        due_date, 
+        'unpaid'
+      ]
     );
    
     await client.query('COMMIT');
@@ -605,6 +650,47 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
   } finally {
     client.release();
   }
+}));
+
+// ==================== UPDATE INVOICE (with discount) ====================
+app.put('/api/invoices/:id', authenticateToken, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { 
+    amount, 
+    discount = 0, 
+    discount_note, 
+    due_date,
+    status 
+  } = req.body;
+
+  // Calculate final amount
+  const finalAmount = parseFloat(amount) - parseFloat(discount);
+  
+  if (finalAmount < 0) {
+    return res.status(400).json({ error: 'Discount cannot exceed invoice amount' });
+  }
+
+  const result = await pool.query(
+    `UPDATE invoices 
+     SET amount = $1, 
+         discount = $2, 
+         discount_note = $3,
+         final_amount = $4,
+         due_date = $5,
+         status = $6
+     WHERE id = $7 
+     RETURNING *`,
+    [amount, discount, discount_note, finalAmount, due_date, status, id]
+  );
+
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Invoice not found' });
+  }
+
+  res.json({
+    message: 'Invoice updated successfully',
+    data: result.rows[0]
+  });
 }));
 
 app.put('/api/invoices/:id/status', authenticateToken, asyncHandler(async (req, res) => {
