@@ -22,13 +22,15 @@ CREATE TABLE IF NOT EXISTS packages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Subscriptions Table
+-- Subscriptions Table (FIXED - Added payment_due_day & next_due_date)
 CREATE TABLE IF NOT EXISTS subscriptions (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
     package_id INTEGER REFERENCES packages(id),
     start_date DATE NOT NULL,
     end_date DATE,
+    payment_due_day INTEGER DEFAULT 1,          -- NEW: Day of month for payment (1-31)
+    next_due_date DATE,                          -- NEW: Next invoice generation date
     status VARCHAR(50) DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
