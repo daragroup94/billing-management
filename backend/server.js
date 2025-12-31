@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const { generateMonthlyInvoices } = require('./utils/invoice-generator');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,29 +24,28 @@ const pool = new Pool({
 // Make pool available to routes
 app.locals.pool = pool;
 
-// Trust proxy - FIX untuk error X-Forwarded-For
+// Trust proxy
 app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
 
-// Rate limiting - RELAXED untuk development
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 1000 untuk dev
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   message: 'Too many requests, please try again later'
 });
 app.use('/api/', limiter);
 
-// Auth rate limit - LEBIH RELAXED
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 100 untuk dev
+  max: process.env.NODE_ENV === 'production' ? 5 : 100,
   message: 'Too many login attempts, please try again later',
-  skipSuccessfulRequests: true // Skip counting untuk login sukses
+  skipSuccessfulRequests: true
 });
 
-// Enhanced CORS configuration
+// CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -57,7 +57,6 @@ const corsOptions = {
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      // Di production bisa diganti jadi callback(new Error('Not allowed by CORS'))
       callback(null, true); // For development
     }
   },
@@ -69,13 +68,13 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware
+// Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-// Error handling middleware
+// Error handling helper
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
@@ -85,7 +84,7 @@ const { authenticateToken, requireAdmin } = require('./middleware/auth');
 
 // Import routes
 const authRoutes = require('./routes/auth');
-const settingsRoutes = require('./routes/settings'); // ← TAMBAH INI
+const settingsRoutes = require('./routes/settings');
 
 // Health check
 app.get('/health', (req, res) => {
@@ -93,7 +92,7 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'ISP Billing API',
-    version: '2.0.0'
+    version: '2.2.0'
   });
 });
 
@@ -107,10 +106,11 @@ app.get('/health/db', asyncHandler(async (req, res) => {
   });
 }));
 
-// ==================== AUTH ROUTES (PUBLIC) ====================
+// ==================== AUTH ROUTES ====================
 app.use('/api/auth', authLimiter, authRoutes);
-// ==================== SETTINGS ROUTES (PROTECTED) ====================
-app.use('/api/settings', authenticateToken, settingsRoutes); // ← TAMBAH INI
+
+// ==================== SETTINGS ROUTES ====================
+app.use('/api/settings', authenticateToken, settingsRoutes);
 
 // ==================== DASHBOARD ====================
 app.get('/api/dashboard/stats', authenticateToken, asyncHandler(async (req, res) => {
@@ -259,6 +259,7 @@ app.get('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
   let query = 'SELECT * FROM customers WHERE 1=1';
   let params = [];
   let paramCount = 1;
+  
   if (search) {
     query += ` AND (name ILIKE $${paramCount} OR email ILIKE $${paramCount} OR phone ILIKE $${paramCount})`;
     params.push(`%${search}%`);
@@ -269,8 +270,10 @@ app.get('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
     params.push(status);
     paramCount++;
   }
+  
   query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
   params.push(limit, offset);
+  
   const result = await pool.query(query, params);
   const countResult = await pool.query('SELECT COUNT(*) FROM customers WHERE 1=1');
  
@@ -288,6 +291,7 @@ app.post('/api/customers', authenticateToken, asyncHandler(async (req, res) => {
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required' });
   }
+  
   const result = await pool.query(
     'INSERT INTO customers (name, email, phone, address, installation_address, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
     [name, email, phone, address, installation_address, 'active']
@@ -375,11 +379,36 @@ app.post('/api/customers/with-subscription', authenticateToken, asyncHandler(asy
 
     const subscriptionId = subscriptionResult.rows[0].id;
 
-    // 3. Hitung tanggal jatuh tempo pertama (bulan depan)
-    const today = new Date();
-    let dueDate = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
-    if (dueDate <= today) {
-      dueDate = new Date(today.getFullYear(), today.getMonth() + 2, dueDay);
+    // ===================================================================
+    // LOGIKA DUE DATE: Generate invoice untuk bulan SETELAH installation
+    // ===================================================================
+    // Contoh:
+    // - Install 2 Okt 2025, due_day=1 → Invoice jatuh tempo 1 Nov 2025
+    // - Install 2 Okt 2025, due_day=15 → Invoice jatuh tempo 15 Nov 2025
+    // - Install 15 Des 2025, due_day=1 → Invoice jatuh tempo 1 Jan 2026
+    // ===================================================================
+    
+    const installDate = new Date(startDate);
+    const installMonth = installDate.getMonth();
+    const installYear = installDate.getFullYear();
+    
+    // Due date = bulan berikutnya setelah install, di tanggal due_day
+    let dueMonth = installMonth + 1;
+    let dueYear = installYear;
+    
+    // Handle year rollover (Dec → Jan)
+    if (dueMonth > 11) {
+      dueMonth = 0;
+      dueYear++;
+    }
+    
+    // Set due date
+    const dueDate = new Date(dueYear, dueMonth, dueDay);
+    
+    // Pastikan due_day tidak melebihi akhir bulan (misal Feb hanya 28/29 hari)
+    if (dueDate.getMonth() !== dueMonth) {
+      // Jika overflow ke bulan berikutnya, set ke hari terakhir bulan sebelumnya
+      dueDate.setDate(0); // Mundur ke akhir bulan sebelumnya
     }
 
     // Update next_due_date di subscription
@@ -401,7 +430,7 @@ app.post('/api/customers/with-subscription', authenticateToken, asyncHandler(asy
     const amount = packageResult.rows[0].price;
 
     // 5. Buat invoice pertama
-    const invoiceNumber = `INV-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}-${String(customerId).padStart(5, '0')}`;
+    const invoiceNumber = `INV-${dueYear}${String(dueMonth + 1).padStart(2, '0')}-${String(customerId).padStart(5, '0')}`;
 
     await client.query(
       `INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status)
@@ -512,6 +541,7 @@ app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
  
   let params = [];
   let paramCount = 1;
+  
   if (status) {
     query += ` AND i.status = $${paramCount}`;
     params.push(status);
@@ -522,8 +552,10 @@ app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
     params.push(customer_id);
     paramCount++;
   }
+  
   query += ` ORDER BY i.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
   params.push(limit, offset);
+  
   const result = await pool.query(query, params);
   res.json(result.rows);
 }));
@@ -534,6 +566,7 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
   if (!customer_id || !package_id || !invoice_number || !amount || !due_date) {
     return res.status(400).json({ error: 'All fields are required' });
   }
+  
   const client = await pool.connect();
  
   try {
@@ -629,6 +662,7 @@ app.post('/api/payments', authenticateToken, asyncHandler(async (req, res) => {
   if (!invoice_id || !amount || !payment_method) {
     return res.status(400).json({ error: 'Invoice ID, amount, and payment method are required' });
   }
+  
   const client = await pool.connect();
  
   try {
@@ -685,6 +719,7 @@ async function initializeDatabase() {
         WHERE table_name = 'users'
       );
     `);
+    
     if (!tableCheck.rows[0].exists) {
       console.log('🔧 Creating users table...');
      
@@ -702,6 +737,7 @@ async function initializeDatabase() {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      
       await client.query(`
         CREATE TABLE sessions (
           id SERIAL PRIMARY KEY,
@@ -713,6 +749,7 @@ async function initializeDatabase() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      
       await client.query('CREATE INDEX idx_sessions_token ON sessions(token);');
       await client.query('CREATE INDEX idx_sessions_user_id ON sessions(user_id);');
       await client.query('CREATE INDEX idx_users_username ON users(username);');
@@ -720,10 +757,12 @@ async function initializeDatabase() {
 
       const hashedPassword = await bcrypt.hash('daragroup1994', 10);
       console.log('🔐 Generated password hash:', hashedPassword);
+      
       await client.query(`
         INSERT INTO users (username, password, email, full_name, role, status)
         VALUES ($1, $2, $3, $4, $5, $6)
       `, ['admin', hashedPassword, 'admin@ispbilling.com', 'Administrator', 'admin', 'active']);
+      
       console.log('✅ Database initialized successfully!');
       console.log('👤 Admin user created: Username: admin | Password: daragroup1994');
     } else {

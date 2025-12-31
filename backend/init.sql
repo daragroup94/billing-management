@@ -1,3 +1,7 @@
+-- ================================================
+-- ISP BILLING DATABASE SCHEMA - COMPLETE
+-- ================================================
+
 -- Customers Table
 CREATE TABLE IF NOT EXISTS customers (
     id SERIAL PRIMARY KEY,
@@ -22,17 +26,18 @@ CREATE TABLE IF NOT EXISTS packages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Subscriptions Table (FIXED - Added payment_due_day & next_due_date)
+-- Subscriptions Table (WITH payment_due_day & next_due_date)
 CREATE TABLE IF NOT EXISTS subscriptions (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
     package_id INTEGER REFERENCES packages(id),
     start_date DATE NOT NULL,
     end_date DATE,
-    payment_due_day INTEGER DEFAULT 1,          -- NEW: Day of month for payment (1-31)
-    next_due_date DATE,                          -- NEW: Next invoice generation date
+    payment_due_day INTEGER DEFAULT 1 CHECK (payment_due_day >= 1 AND payment_due_day <= 31),
+    next_due_date DATE,
     status VARCHAR(50) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Invoices Table
@@ -71,18 +76,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert default admin user
--- Password: daragroup1994 (akan di-hash di aplikasi)
-INSERT INTO users (username, password, email, full_name, role, status) 
-VALUES (
-    'admin', 
-    '$2b$10$9SPmuQ2hcYfSePxIjJT/J.0lJXrQmrwRGufWTscS0/eaKfUDx8GmC', 
-    'admin@ispbilling.com', 
-    'Administrator', 
-    'admin', 
-    'active'
-) ON CONFLICT (username) DO NOTHING;
-
 -- Sessions Table untuk tracking login
 CREATE TABLE IF NOT EXISTS sessions (
     id SERIAL PRIMARY KEY,
@@ -106,7 +99,9 @@ CREATE TABLE IF NOT EXISTS settings (
     UNIQUE(user_id, setting_key)
 );
 
--- Index untuk performa
+-- ================================================
+-- INDEXES untuk performa
+-- ================================================
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -114,8 +109,14 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_settings_user_id ON settings(user_id);
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(setting_key);
 CREATE INDEX IF NOT EXISTS idx_settings_type ON settings(setting_type);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_next_due_date ON subscriptions(next_due_date);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 
--- Function untuk auto-update updated_at
+-- ================================================
+-- TRIGGERS untuk auto-update updated_at
+-- ================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -124,12 +125,44 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger untuk auto-update updated_at pada settings
+DROP TRIGGER IF EXISTS update_customers_updated_at ON customers;
+CREATE TRIGGER update_customers_updated_at
+    BEFORE UPDATE ON customers
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
+CREATE TRIGGER update_subscriptions_updated_at
+    BEFORE UPDATE ON subscriptions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 DROP TRIGGER IF EXISTS update_settings_updated_at ON settings;
 CREATE TRIGGER update_settings_updated_at
     BEFORE UPDATE ON settings
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+CREATE TRIGGER update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ================================================
+-- DEFAULT DATA
+-- ================================================
+
+-- Insert default admin user (password: daragroup1994)
+INSERT INTO users (username, password, email, full_name, role, status) 
+VALUES (
+    'admin', 
+    '$2b$10$9SPmuQ2hcYfSePxIjJT/J.0lJXrQmrwRGufWTscS0/eaKfUDx8GmC', 
+    'admin@ispbilling.com', 
+    'Administrator', 
+    'admin', 
+    'active'
+) ON CONFLICT (username) DO NOTHING;
 
 -- Insert default settings untuk admin user
 INSERT INTO settings (user_id, setting_key, setting_value, setting_type)

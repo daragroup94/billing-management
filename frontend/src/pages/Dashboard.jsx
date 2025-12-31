@@ -1,5 +1,5 @@
 // ================================================
-// FILE: frontend/src/pages/Dashboard.jsx - ENHANCED VERSION
+// FILE: frontend/src/pages/Dashboard.jsx - COMPLETE
 // ================================================
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -29,8 +29,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-    // Auto refresh setiap 30 detik untuk update overdue
-    const interval = setInterval(fetchDashboardData, 30000);
+    // Auto refresh dashboard every 60 seconds untuk update overdue real-time
+    const interval = setInterval(fetchDashboardData, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -38,7 +38,7 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
-      // ✅ ENHANCED: Gunakan endpoint backend yang sudah filter overdue
+      // Fetch all dashboard data
       const [
         statsData, 
         activityData, 
@@ -52,7 +52,7 @@ const Dashboard = () => {
         dashboardAPI.getRevenueChart(),
         dashboardAPI.getCustomerGrowth(),
         dashboardAPI.getPackageDistribution(),
-        api.get('/invoices/overdue').then(res => res.data) // NEW ENDPOINT
+        api.get('/invoices/overdue').then(res => res.data)
       ]);
       
       setStats(statsData);
@@ -152,7 +152,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* ✅ ENHANCED: Overdue Alert Banner dengan detail lebih lengkap */}
+      {/* ✅ OVERDUE ALERT BANNER */}
       {overdueInvoices.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -243,7 +243,7 @@ const Dashboard = () => {
         })}
       </div>
 
-      {/* ✅ NEW: Overdue Invoice Card (jika ada) */}
+      {/* Overdue Invoice Card (if exists) */}
       {stats.overdueInvoices > 0 && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
