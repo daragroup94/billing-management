@@ -1,5 +1,6 @@
 // ================================================
-// FILE: frontend/src/pages/Invoices.jsx - WITH DISCOUNT SUPPORT
+// FILE: frontend/src/pages/Invoices.jsx - FULL FIXED VERSION
+// Fixed: Status dropdown null value warning
 // ================================================
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -292,8 +293,9 @@ const Invoices = () => {
                         </div>
                       </td>
                       <td className="p-4">
+                        {/* ✅ FIXED: Added fallback value */}
                         <select
-                          value={invoice.status}
+                          value={invoice.status || 'unpaid'}
                           onChange={(e) => handleStatusChange(invoice.id, e.target.value)}
                           className={`badge cursor-pointer ${
                             invoice.status === 'paid' ? 'badge-success' :

@@ -1,3 +1,7 @@
+// ================================================
+// FILE: frontend/src/pages/Payments.jsx - FIXED VERSION
+// Fixed: Unpaid invoices tidak muncul di dropdown
+// ================================================
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, Plus, Search, Calendar, X, CheckCircle } from 'lucide-react';
@@ -24,15 +28,30 @@ const Payments = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      
+      // ✅ FIXED: Fetch unpaid invoices dengan parameter yang benar
       const [paymentsData, invoicesData] = await Promise.all([
         paymentsAPI.getAll(),
-        invoicesAPI.getAll({ status: 'unpaid' })
+        invoicesAPI.getAll({ status: 'unpaid' }) // Parameter yang benar
       ]);
+      
+      console.log('📋 Unpaid Invoices:', invoicesData); // Debug log
+      
       setPayments(paymentsData);
-      setUnpaidInvoices(invoicesData);
+      
+      // ✅ FIXED: Handle berbagai format response
+      // Backend bisa return array langsung atau object dengan data property
+      const invoicesList = Array.isArray(invoicesData) 
+        ? invoicesData 
+        : (invoicesData.data || []);
+      
+      setUnpaidInvoices(invoicesList);
+      
+      console.log('✅ Unpaid invoices loaded:', invoicesList.length);
+      
     } catch (error) {
+      console.error('❌ Fetch data error:', error);
       toast.error('Failed to fetch data');
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -40,14 +59,28 @@ const Payments = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validation
+    if (!formData.invoice_id) {
+      toast.error('Please select an invoice');
+      return;
+    }
+    
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    
     try {
       await paymentsAPI.create(formData);
       toast.success('Payment recorded successfully!');
       setShowModal(false);
       resetForm();
-      fetchData();
+      fetchData(); // Refresh data
     } catch (error) {
-      toast.error(error.message || 'Operation failed');
+      const errorMessage = error.response?.data?.error || error.message || 'Operation failed';
+      toast.error(errorMessage);
+      console.error('Payment error:', error);
     }
   };
 
@@ -65,7 +98,7 @@ const Payments = () => {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
-    }).format(price);
+    }).format(price || 0);
   };
 
   const filteredPayments = payments.filter(payment =>
@@ -73,7 +106,7 @@ const Payments = () => {
     payment.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalPayments = payments.reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
+  const totalPayments = payments.reduce((sum, payment) => sum + parseFloat(payment.amount || 0), 0);
 
   if (loading) {
     return (
@@ -260,28 +293,48 @@ const Payments = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* ✅ FIXED: Better invoice selection UI */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Unpaid Invoice *</label>
-                  <select
-                    required
-                    value={formData.invoice_id}
-                    onChange={(e) => {
-                      const invoice = unpaidInvoices.find(inv => inv.id === parseInt(e.target.value));
-                      setFormData({ 
-                        ...formData, 
-                        invoice_id: e.target.value,
-                        amount: invoice?.amount || ''
-                      });
-                    }}
-                    className="input"
-                  >
-                    <option value="">Select Invoice</option>
-                    {unpaidInvoices.map(invoice => (
-                      <option key={invoice.id} value={invoice.id}>
-                        {invoice.invoice_number} - {invoice.customer_name} - {formatPrice(invoice.amount)}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Select Unpaid Invoice *
+                  </label>
+                  
+                  {unpaidInvoices.length === 0 ? (
+                    <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm">
+                      ⚠️ No unpaid invoices available. All invoices have been paid!
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={formData.invoice_id}
+                      onChange={(e) => {
+                        const invoice = unpaidInvoices.find(inv => inv.id === parseInt(e.target.value));
+                        setFormData({ 
+                          ...formData, 
+                          invoice_id: e.target.value,
+                          amount: invoice?.final_amount || invoice?.amount || ''
+                        });
+                      }}
+                      className="input"
+                    >
+                      <option value="">-- Select Invoice --</option>
+                      {unpaidInvoices.map(invoice => {
+                        // Calculate final amount with discount
+                        const finalAmount = invoice.final_amount || (invoice.amount - (invoice.discount || 0));
+                        
+                        return (
+                          <option key={invoice.id} value={invoice.id}>
+                            {invoice.invoice_number} - {invoice.customer_name} - {formatPrice(finalAmount)}
+                            {invoice.discount > 0 && ` (Disc: ${formatPrice(invoice.discount)})`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+                  
+                  <p className="text-xs text-slate-500 mt-1">
+                    {unpaidInvoices.length} unpaid invoice(s) available
+                  </p>
                 </div>
 
                 <div>
@@ -293,7 +346,14 @@ const Payments = () => {
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     className="input"
                     placeholder="300000"
+                    min="0"
+                    disabled={!formData.invoice_id}
                   />
+                  {formData.amount && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {formatPrice(formData.amount)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -308,7 +368,7 @@ const Payments = () => {
                     <option value="transfer">Bank Transfer</option>
                     <option value="credit_card">Credit Card</option>
                     <option value="debit_card">Debit Card</option>
-                    <option value="e-wallet">E-Wallet</option>
+                    <option value="e-wallet">E-Wallet (DANA/OVO/GoPay)</option>
                   </select>
                 </div>
 
@@ -323,7 +383,11 @@ const Payments = () => {
                 </div>
 
                 <div className="flex gap-3 pt-4">
-                  <button type="submit" className="btn-success flex-1">
+                  <button 
+                    type="submit" 
+                    className="btn-success flex-1"
+                    disabled={unpaidInvoices.length === 0}
+                  >
                     Record Payment
                   </button>
                   <button

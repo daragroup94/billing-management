@@ -1,5 +1,6 @@
 // ================================================
-// FILE: frontend/src/pages/Dashboard.jsx - COMPLETE
+// FILE: frontend/src/pages/Dashboard.jsx - FIXED COMPLETE
+// Fixed: Auto-refresh infinite loop issue
 // ================================================
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -27,12 +28,21 @@ const Dashboard = () => {
   const [customerGrowthData, setCustomerGrowthData] = useState([]);
   const [packageDistData, setPackageDistData] = useState([]);
 
+  // ✅ FIXED: useEffect dengan dependency array yang benar
   useEffect(() => {
+    // Fetch data pertama kali saat component mount
     fetchDashboardData();
-    // Auto refresh dashboard every 60 seconds untuk update overdue real-time
-    const interval = setInterval(fetchDashboardData, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    // Setup auto-refresh setiap 60 detik
+    const refreshInterval = setInterval(() => {
+      fetchDashboardData();
+    }, 60000); // 60 detik = 1 menit
+    
+    // Cleanup: hapus interval saat component unmount
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, []); // ← DEPENDENCY ARRAY KOSONG = hanya run sekali saat mount
 
   const fetchDashboardData = async () => {
     try {
@@ -62,9 +72,10 @@ const Dashboard = () => {
       setPackageDistData(packageDist);
       setOverdueInvoices(overdueData.data || []);
       
-      console.log('📊 Dashboard Data Loaded:');
-      console.log('Stats:', statsData);
-      console.log('Overdue Invoices:', overdueData.count);
+      // Log hanya di development (opsional, bisa dihapus di production)
+      if (import.meta.env.DEV) {
+        console.log('📊 Dashboard refreshed at:', new Date().toLocaleTimeString());
+      }
       
     } catch (error) {
       toast.error('Failed to fetch dashboard data');

@@ -1,6 +1,6 @@
 // ================================================
-// FILE: frontend/src/components/InvoicePrintTemplate.jsx
-// Komponen untuk template print invoice yang mewah & elegan
+// FILE: frontend/src/components/InvoicePrintTemplate.jsx - FIXED VERSION
+// Fixed: Null safety untuk customer_name dan data lainnya
 // ================================================
 import { useRef } from 'react';
 import { X, Printer, Download } from 'lucide-react';
@@ -22,10 +22,11 @@ const InvoicePrintTemplate = ({ invoice, onClose }) => {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
-    }).format(price);
+    }).format(price || 0);
   };
 
   const formatDate = (date) => {
+    if (!date) return '-';
     return new Date(date).toLocaleDateString('id-ID', {
       day: 'numeric',
       month: 'long',
@@ -114,6 +115,24 @@ const InvoicePrintTemplate = ({ invoice, onClose }) => {
 
 // Komponen Invoice yang akan di-print
 const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
+  // ✅ FIXED: Null safety untuk semua data
+  const safeInvoice = {
+    customer_name: invoice?.customer_name || 'N/A',
+    email: invoice?.email || 'N/A',
+    customer_phone: invoice?.customer_phone || '',
+    customer_address: invoice?.customer_address || '',
+    invoice_number: invoice?.invoice_number || 'N/A',
+    created_at: invoice?.created_at || new Date(),
+    due_date: invoice?.due_date || new Date(),
+    status: invoice?.status || 'unpaid',
+    package_name: invoice?.package_name || 'Standard Package',
+    package_speed: invoice?.package_speed || 'N/A',
+    amount: invoice?.amount || 0,
+    discount: invoice?.discount || 0,
+    discount_note: invoice?.discount_note || '',
+    final_amount: invoice?.final_amount || (invoice?.amount - invoice?.discount) || 0
+  };
+
   return (
     <div className="p-12 bg-white text-gray-900" style={{ minHeight: '297mm' }}>
       {/* Header dengan Gradient Background */}
@@ -156,24 +175,24 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-8">
                 <span className="text-gray-600 font-semibold">Invoice No:</span>
-                <span className="font-bold text-blue-600">{invoice.invoice_number}</span>
+                <span className="font-bold text-blue-600">{safeInvoice.invoice_number}</span>
               </div>
               <div className="flex justify-between gap-8">
                 <span className="text-gray-600 font-semibold">Date:</span>
-                <span className="font-semibold">{formatDate(invoice.created_at)}</span>
+                <span className="font-semibold">{formatDate(safeInvoice.created_at)}</span>
               </div>
               <div className="flex justify-between gap-8">
                 <span className="text-gray-600 font-semibold">Due Date:</span>
-                <span className="font-semibold text-red-600">{formatDate(invoice.due_date)}</span>
+                <span className="font-semibold text-red-600">{formatDate(safeInvoice.due_date)}</span>
               </div>
               <div className="flex justify-between gap-8">
                 <span className="text-gray-600 font-semibold">Status:</span>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  invoice.status === 'paid' 
+                  safeInvoice.status === 'paid' 
                     ? 'bg-green-100 text-green-700' 
                     : 'bg-red-100 text-red-700'
                 }`}>
-                  {invoice.status.toUpperCase()}
+                  {safeInvoice.status.toUpperCase()}
                 </span>
               </div>
             </div>
@@ -193,20 +212,20 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
         </h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-xl font-bold text-gray-900 mb-1">{invoice.customer_name}</p>
+            <p className="text-xl font-bold text-gray-900 mb-1">{safeInvoice.customer_name}</p>
             <p className="text-sm text-gray-600">
-              <span className="font-semibold">Email:</span> {invoice.email}
+              <span className="font-semibold">Email:</span> {safeInvoice.email}
             </p>
-            {invoice.customer_phone && (
+            {safeInvoice.customer_phone && (
               <p className="text-sm text-gray-600">
-                <span className="font-semibold">Phone:</span> {invoice.customer_phone}
+                <span className="font-semibold">Phone:</span> {safeInvoice.customer_phone}
               </p>
             )}
           </div>
-          {invoice.customer_address && (
+          {safeInvoice.customer_address && (
             <div className="text-right">
               <p className="text-xs text-gray-500 font-semibold mb-1">Customer Address:</p>
-              <p className="text-sm text-gray-700">{invoice.customer_address}</p>
+              <p className="text-sm text-gray-700">{safeInvoice.customer_address}</p>
             </div>
           )}
         </div>
@@ -231,14 +250,17 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
               </td>
               <td className="py-4 px-4 text-center">
                 <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
-                  {invoice.package_name || 'Standard Package'}
+                  {safeInvoice.package_name}
                 </span>
+                {safeInvoice.package_speed && (
+                  <p className="text-xs text-gray-500 mt-1">{safeInvoice.package_speed}</p>
+                )}
               </td>
               <td className="py-4 px-4 text-center text-sm text-gray-600">
                 1 Month
               </td>
               <td className="py-4 px-4 text-right font-bold text-gray-800">
-                {formatPrice(invoice.amount)}
+                {formatPrice(safeInvoice.amount)}
               </td>
             </tr>
           </tbody>
@@ -251,19 +273,19 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
           <div className="space-y-2 mb-4">
             <div className="flex justify-between text-gray-600 py-2 border-b border-gray-200">
               <span className="font-semibold">Subtotal:</span>
-              <span className="font-semibold">{formatPrice(invoice.amount)}</span>
+              <span className="font-semibold">{formatPrice(safeInvoice.amount)}</span>
             </div>
             
             {/* Discount Row - Only show if discount exists */}
-            {(invoice.discount && parseFloat(invoice.discount) > 0) && (
+            {(safeInvoice.discount && parseFloat(safeInvoice.discount) > 0) && (
               <div className="flex justify-between py-2 border-b border-gray-200">
                 <div>
                   <span className="font-semibold text-red-600">Discount:</span>
-                  {invoice.discount_note && (
-                    <p className="text-xs text-gray-500 mt-1">({invoice.discount_note})</p>
+                  {safeInvoice.discount_note && (
+                    <p className="text-xs text-gray-500 mt-1">({safeInvoice.discount_note})</p>
                   )}
                 </div>
-                <span className="font-semibold text-red-600">-{formatPrice(invoice.discount)}</span>
+                <span className="font-semibold text-red-600">-{formatPrice(safeInvoice.discount)}</span>
               </div>
             )}
             
@@ -275,19 +297,14 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
             {/* Final Total */}
             <div className="flex justify-between text-xl font-bold py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 rounded-lg shadow-lg">
               <span>TOTAL TO PAY:</span>
-              <span>
-                {formatPrice(
-                  (parseFloat(invoice.final_amount) || 
-                  (parseFloat(invoice.amount) - parseFloat(invoice.discount || 0)))
-                )}
-              </span>
+              <span>{formatPrice(safeInvoice.final_amount)}</span>
             </div>
             
             {/* Discount Info Badge */}
-            {(invoice.discount && parseFloat(invoice.discount) > 0) && (
+            {(safeInvoice.discount && parseFloat(safeInvoice.discount) > 0) && (
               <div className="mt-3 p-3 bg-green-50 border-l-4 border-green-500 rounded-r-lg">
                 <p className="text-xs text-green-700 font-semibold">
-                  ✓ You saved {formatPrice(invoice.discount)} with this invoice!
+                  ✓ You saved {formatPrice(safeInvoice.discount)} with this invoice!
                 </p>
               </div>
             )}
