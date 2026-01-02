@@ -87,8 +87,8 @@ const InvoicePrintTemplate = ({ invoice, onClose }) => {
         </motion.div>
       </div>
 
-      {/* Print-only Version */}
-      <div className="hidden print:block">
+      {/* Print-only Version - Hidden on screen, visible on print */}
+      <div className="printable-invoice-area">
         <PrintableInvoice invoice={invoice} formatPrice={formatPrice} formatDate={formatDate} />
       </div>
 
@@ -96,16 +96,37 @@ const InvoicePrintTemplate = ({ invoice, onClose }) => {
       <style>{`
         @media print {
           @page {
-            size: A4;
-            margin: 0;
+            size: A4 portrait;
+            margin: 10mm;
           }
-          body {
-            margin: 0;
-            padding: 0;
+          
+          body * {
+            visibility: hidden;
           }
+          
+          .printable-invoice-area,
+          .printable-invoice-area * {
+            visibility: visible;
+          }
+          
+          .printable-invoice-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: white !important;
+          }
+          
           * {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+        }
+        
+        @media screen {
+          .printable-invoice-area {
+            display: none;
           }
         }
       `}</style>
@@ -134,9 +155,9 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
   };
 
   return (
-    <div className="p-12 bg-white text-gray-900" style={{ minHeight: '297mm' }}>
+    <div className="p-6 bg-white text-gray-900" style={{ maxWidth: '210mm', margin: '0 auto' }}>
       {/* Header dengan Gradient Background */}
-      <div className="relative mb-8 pb-8 border-b-4 border-blue-600">
+      <div className="relative mb-6 pb-6 border-b-4 border-blue-600">
         {/* Decorative Elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full opacity-20 -mr-32 -mt-32"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-purple-100 to-pink-100 rounded-full opacity-20 -ml-24 -mb-24"></div>
@@ -144,20 +165,20 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
         <div className="relative z-10 flex items-start justify-between">
           {/* Company Info */}
           <div>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
                 </svg>
               </div>
               <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   daranett
                 </h1>
-                <p className="text-sm text-gray-600 font-semibold">Penyedia Layanan Internet</p>
+                <p className="text-xs text-gray-600 font-semibold">Penyedia Layanan Internet</p>
               </div>
             </div>
-            <div className="mt-4 space-y-1 text-sm text-gray-600">
+            <div className="mt-3 space-y-1 text-xs text-gray-600">
               <p className="font-semibold text-gray-800">daranett</p>
               <p>Desa Bacin, Ngempik</p>
               <p>Kec. Bae, Kab. Kudus, Jawa Tengah</p>
@@ -201,7 +222,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       </div>
 
       {/* Customer Information */}
-      <div className="mb-8 p-6 bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl border border-blue-200">
+      <div className="mb-6 p-4 bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl border border-blue-200">
         <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -232,7 +253,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       </div>
 
       {/* Invoice Details Table */}
-      <div className="mb-8">
+      <div className="mb-6">
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
@@ -268,7 +289,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       </div>
 
       {/* Totals with Discount */}
-      <div className="flex justify-end mb-8">
+      <div className="flex justify-end mb-6">
         <div className="w-96">
           <div className="space-y-2 mb-4">
             <div className="flex justify-between text-gray-600 py-2 border-b border-gray-200">
@@ -313,7 +334,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       </div>
 
       {/* Payment Information */}
-      <div className="mb-8 p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-300">
+      <div className="mb-6 p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-300">
         <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
           <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -343,7 +364,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       </div>
 
       {/* Terms & Notes */}
-      <div className="mb-8 p-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
+      <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
         <h3 className="text-sm font-bold text-amber-800 mb-2">Syarat & Ketentuan Pembayaran:</h3>
         <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
           <li>Pembayaran harus diterima sebelum tanggal jatuh tempo untuk menghindari pemutusan layanan</li>
@@ -355,7 +376,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       </div>
 
       {/* Footer */}
-      <div className="border-t-2 border-gray-300 pt-6">
+      <div className="border-t-2 border-gray-300 pt-4">
         <div className="flex justify-between items-end">
           <div className="text-xs text-gray-500 space-y-1">
             <p>Faktur dibuat pada {formatDate(new Date())}</p>
@@ -372,8 +393,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
         </div>
       </div>
 
-      {/* Decorative Footer Bar */}
-      <div className="mt-8 h-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-full"></div>
+      {/* Footer end - no decorative bar */}
     </div>
   );
 };
