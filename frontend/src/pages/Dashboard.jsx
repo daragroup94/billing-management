@@ -1,6 +1,6 @@
 // ================================================
-// FILE: frontend/src/pages/Dashboard.jsx - FIXED COMPLETE
-// Fixed: Auto-refresh infinite loop issue
+// FILE: frontend/src/pages/Dashboard.jsx - FIXED NAVIGATION
+// Fixed: "Lihat Detail" button now works properly
 // ================================================
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -10,7 +10,7 @@ import { dashboardAPI } from '../api';
 import api from '../api/client';
 import toast from 'react-hot-toast';
 
-const Dashboard = () => {
+const Dashboard = ({ onNavigate }) => {  // ✅ Terima props onNavigate dari App.jsx
   const [stats, setStats] = useState({
     totalCustomers: 0,
     monthlyRevenue: 0,
@@ -28,27 +28,22 @@ const Dashboard = () => {
   const [customerGrowthData, setCustomerGrowthData] = useState([]);
   const [packageDistData, setPackageDistData] = useState([]);
 
-  // ✅ FIXED: useEffect dengan dependency array yang benar
   useEffect(() => {
-    // Fetch data pertama kali saat component mount
     fetchDashboardData();
     
-    // Setup auto-refresh setiap 60 detik
     const refreshInterval = setInterval(() => {
       fetchDashboardData();
-    }, 60000); // 60 detik = 1 menit
+    }, 60000);
     
-    // Cleanup: hapus interval saat component unmount
     return () => {
       clearInterval(refreshInterval);
     };
-  }, []); // ← DEPENDENCY ARRAY KOSONG = hanya run sekali saat mount
+  }, []);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       
-      // Fetch all dashboard data
       const [
         statsData, 
         activityData, 
@@ -72,7 +67,6 @@ const Dashboard = () => {
       setPackageDistData(packageDist);
       setOverdueInvoices(overdueData.data || []);
       
-      // Log hanya di development (opsional, bisa dihapus di production)
       if (import.meta.env.DEV) {
         console.log('📊 Dashboard refreshed at:', new Date().toLocaleTimeString());
       }
@@ -100,10 +94,16 @@ const Dashboard = () => {
     return `Rp ${(value / 1000).toFixed(0)}K`;
   };
 
-  // Colors for charts
+  // ✅ FIXED: Handler untuk navigasi ke Invoices page
+  const handleViewOverdueDetails = () => {
+    if (onNavigate) {
+      onNavigate('invoices'); // Navigate ke halaman invoices
+      toast.success('Menampilkan invoice terlambat');
+    }
+  };
+
   const COLORS = ['#5865f2', '#8b5cf6', '#ec4899', '#f59e0b'];
 
-  // Custom tooltip
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
@@ -163,7 +163,7 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* ✅ OVERDUE ALERT BANNER */}
+      {/* ✅ OVERDUE ALERT BANNER - FIXED BUTTON */}
       {overdueInvoices.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -209,14 +209,19 @@ const Dashboard = () => {
                 ))}
               </div>
 
-              {overdueInvoices.length > 5 && (
-                <button 
-                  onClick={() => window.location.hash = '#invoices-overdue'}
-                  className="text-sm text-red-300 hover:text-red-200 underline"
-                >
-                  Lihat {overdueInvoices.length - 5} invoice lainnya →
-                </button>
-              )}
+              {/* ✅ FIXED: Proper button with onClick handler */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleViewOverdueDetails}
+                className="btn-danger flex items-center gap-2"
+              >
+                <FileText size={18} />
+                {overdueInvoices.length > 5 
+                  ? `Lihat Semua ${overdueInvoices.length} Invoice →` 
+                  : 'Lihat Detail Invoice →'
+                }
+              </motion.button>
             </div>
           </div>
         </motion.div>
@@ -272,12 +277,14 @@ const Dashboard = () => {
                 <p className="text-xs text-slate-500 mt-1">Perlu tindakan segera!</p>
               </div>
             </div>
-            <button 
-              onClick={() => window.location.hash = '#invoices-overdue'}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleViewOverdueDetails}
               className="btn-danger"
             >
               Lihat Detail →
-            </button>
+            </motion.button>
           </div>
         </motion.div>
       )}

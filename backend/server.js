@@ -340,7 +340,7 @@ app.delete('/api/customers/:id', authenticateToken, requireAdmin, asyncHandler(a
   });
 }));
 
-// ==================== CREATE CUSTOMER WITH SUBSCRIPTION ====================
+// ==================== CREATE CUSTOMER WITH SUBSCRIPTION (✅ FIXED) ====================
 app.post('/api/customers/with-subscription', authenticateToken, asyncHandler(async (req, res) => {
   const { 
     name, email, phone, address, installation_address,
@@ -379,45 +379,7 @@ app.post('/api/customers/with-subscription', authenticateToken, asyncHandler(asy
 
     const subscriptionId = subscriptionResult.rows[0].id;
 
-    // ===================================================================
-    // LOGIKA DUE DATE: Generate invoice untuk bulan SETELAH installation
-    // ===================================================================
-    // Contoh:
-    // - Install 2 Okt 2025, due_day=1 → Invoice jatuh tempo 1 Nov 2025
-    // - Install 2 Okt 2025, due_day=15 → Invoice jatuh tempo 15 Nov 2025
-    // - Install 15 Des 2025, due_day=1 → Invoice jatuh tempo 1 Jan 2026
-    // ===================================================================
-    
-    const installDate = new Date(startDate);
-    const installMonth = installDate.getMonth();
-    const installYear = installDate.getFullYear();
-    
-    // Due date = bulan berikutnya setelah install, di tanggal due_day
-    let dueMonth = installMonth + 1;
-    let dueYear = installYear;
-    
-    // Handle year rollover (Dec → Jan)
-    if (dueMonth > 11) {
-      dueMonth = 0;
-      dueYear++;
-    }
-    
-    // Set due date
-    const dueDate = new Date(dueYear, dueMonth, dueDay);
-    
-    // Pastikan due_day tidak melebihi akhir bulan (misal Feb hanya 28/29 hari)
-    if (dueDate.getMonth() !== dueMonth) {
-      // Jika overflow ke bulan berikutnya, set ke hari terakhir bulan sebelumnya
-      dueDate.setDate(0); // Mundur ke akhir bulan sebelumnya
-    }
-
-    // Update next_due_date di subscription
-    await client.query(
-      `UPDATE subscriptions SET next_due_date = $1 WHERE id = $2`,
-      [dueDate.toISOString().split('T')[0], subscriptionId]
-    );
-
-    // 4. Ambil harga paket
+    // 3. Ambil harga paket
     const packageResult = await client.query(
       'SELECT price FROM packages WHERE id = $1 AND status = $2',
       [package_id, 'active']
@@ -429,23 +391,103 @@ app.post('/api/customers/with-subscription', authenticateToken, asyncHandler(asy
 
     const amount = packageResult.rows[0].price;
 
-    // 5. Buat invoice pertama
-    const invoiceNumber = `INV-${dueYear}${String(dueMonth + 1).padStart(2, '0')}-${String(customerId).padStart(5, '0')}`;
+    // ===================================================================
+    // ✅ FIXED: GENERATE MULTIPLE INVOICES untuk bulan-bulan yang terlewat
+    // ===================================================================
+    const installDate = new Date(startDate);
+    const today = new Date();
+    
+    // Hitung berapa bulan dari installation sampai sekarang
+    let currentMonth = installDate.getMonth();
+    let currentYear = installDate.getFullYear();
+    
+    const invoicesCreated = [];
+    let nextDueDate = null;
 
-    await client.query(
-      `INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status)
-       VALUES ($1, $2, $3, $4, $5, 'unpaid')`,
-      [customerId, subscriptionId, invoiceNumber, amount, dueDate.toISOString().split('T')[0]]
-    );
+    // Loop untuk setiap bulan dari installation sampai bulan ini
+    while (true) {
+      // Calculate due date untuk bulan ini
+      let dueMonth = currentMonth + 1;
+      let dueYear = currentYear;
+      
+      if (dueMonth > 11) {
+        dueMonth = 0;
+        dueYear++;
+      }
+      
+      const dueDate = new Date(dueYear, dueMonth, dueDay);
+      
+      // Jika due date melebihi akhir bulan, set ke akhir bulan
+      if (dueDate.getMonth() !== dueMonth) {
+        dueDate.setDate(0);
+      }
+
+      // Jika due date sudah di masa depan, stop
+      if (dueDate > today) {
+        nextDueDate = dueDate.toISOString().split('T')[0];
+        break;
+      }
+
+      // Generate invoice number
+      const invoiceNumber = `INV-${dueYear}${String(dueMonth + 1).padStart(2, '0')}-${String(customerId).padStart(5, '0')}`;
+
+      // Cek apakah invoice sudah ada (preventif)
+      const existingInvoice = await client.query(
+        'SELECT id FROM invoices WHERE invoice_number = $1',
+        [invoiceNumber]
+      );
+
+      if (existingInvoice.rows.length === 0) {
+        // Buat invoice
+        const invoiceResult = await client.query(
+          `INSERT INTO invoices (customer_id, subscription_id, invoice_number, amount, due_date, status)
+           VALUES ($1, $2, $3, $4, $5, 'unpaid')
+           RETURNING id, invoice_number, amount, due_date`,
+          [customerId, subscriptionId, invoiceNumber, amount, dueDate.toISOString().split('T')[0]]
+        );
+        
+        invoicesCreated.push({
+          id: invoiceResult.rows[0].id,
+          invoice_number: invoiceResult.rows[0].invoice_number,
+          due_date: invoiceResult.rows[0].due_date,
+          amount: parseFloat(invoiceResult.rows[0].amount),
+          status: dueDate <= today ? 'OVERDUE' : 'UNPAID'
+        });
+        
+        console.log(`✅ Created invoice: ${invoiceNumber} due ${dueDate.toISOString().split('T')[0]}`);
+      }
+
+      // Move to next month
+      currentMonth++;
+      if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      }
+    }
+
+    // Update subscription dengan next_due_date
+    if (nextDueDate) {
+      await client.query(
+        `UPDATE subscriptions SET next_due_date = $1 WHERE id = $2`,
+        [nextDueDate, subscriptionId]
+      );
+    }
 
     await client.query('COMMIT');
 
+    const totalAmount = invoicesCreated.reduce((sum, inv) => sum + inv.amount, 0);
+
+    console.log(`✅ Customer created with ${invoicesCreated.length} invoice(s), total: Rp ${totalAmount.toLocaleString('id-ID')}`);
+
     res.status(201).json({
       success: true,
-      message: 'Customer created with subscription and first invoice',
+      message: `Customer created with ${invoicesCreated.length} invoice(s)`,
       data: {
         customer: customerResult.rows[0],
-        subscription: subscriptionResult.rows[0]
+        subscription: subscriptionResult.rows[0],
+        invoices_created: invoicesCreated,
+        next_due_date: nextDueDate,
+        total_amount: totalAmount
       }
     });
 
@@ -523,11 +565,6 @@ app.delete('/api/packages/:id', authenticateToken, requireAdmin, asyncHandler(as
   });
 }));
 
-// ================================================
-// UPDATE: backend/server.js - Invoice Routes with Discount
-// Tambahkan/replace bagian INVOICES ROUTES
-// ================================================
-
 // ==================== INVOICES (WITH DISCOUNT SUPPORT) ====================
 app.get('/api/invoices', authenticateToken, asyncHandler(async (req, res) => {
   const { status, customer_id, limit = 100, offset = 0 } = req.query;
@@ -583,7 +620,6 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
     return res.status(400).json({ error: 'All required fields must be provided' });
   }
 
-  // Calculate final amount after discount
   const finalAmount = parseFloat(amount) - parseFloat(discount);
   
   if (finalAmount < 0) {
@@ -595,7 +631,6 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
   try {
     await client.query('BEGIN');
    
-    // Check/Create subscription
     let subscription = await client.query(
       'SELECT id FROM subscriptions WHERE customer_id = $1 AND package_id = $2 AND status = $3',
       [customer_id, package_id, 'active']
@@ -612,7 +647,6 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
       subscription_id = subscription.rows[0].id;
     }
    
-    // Create invoice with discount
     const invoice = await client.query(
       `INSERT INTO invoices (
         customer_id, 
@@ -652,7 +686,6 @@ app.post('/api/invoices/create', authenticateToken, asyncHandler(async (req, res
   }
 }));
 
-// ==================== UPDATE INVOICE (with discount) ====================
 app.put('/api/invoices/:id', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { 
@@ -663,7 +696,6 @@ app.put('/api/invoices/:id', authenticateToken, asyncHandler(async (req, res) =>
     status 
   } = req.body;
 
-  // Calculate final amount
   const finalAmount = parseFloat(amount) - parseFloat(discount);
   
   if (finalAmount < 0) {
@@ -725,6 +757,25 @@ app.delete('/api/invoices/:id', authenticateToken, requireAdmin, asyncHandler(as
     message: 'Invoice deleted successfully',
     id: result.rows[0].id
   });
+}));
+
+// ==================== MANUAL GENERATE INVOICES (✅ NEW) ====================
+app.post('/api/invoices/generate-monthly', authenticateToken, requireAdmin, asyncHandler(async (req, res) => {
+  try {
+    console.log('🔄 Manual invoice generation triggered by admin...');
+    const result = await generateMonthlyInvoices(pool);
+    res.json({
+      success: true,
+      message: `Generated ${result.generated} invoice(s)`,
+      generated: result.generated
+    });
+  } catch (error) {
+    console.error('Generate invoices error:', error);
+    res.status(500).json({
+      error: 'Failed to generate invoices',
+      message: error.message
+    });
+  }
 }));
 
 // ==================== PAYMENTS ====================
@@ -874,17 +925,37 @@ async function initializeDatabase() {
   }
 }
 
+// ==================== AUTO INVOICE GENERATION CRON JOB (✅ NEW) ====================
+const INVOICE_GENERATION_INTERVAL = 60 * 60 * 1000; // 1 jam
+
+setInterval(async () => {
+  try {
+    console.log('🔄 [CRON] Running auto invoice generation...');
+    const result = await generateMonthlyInvoices(pool);
+    if (result.generated > 0) {
+      console.log(`✅ [CRON] Generated ${result.generated} new invoice(s)`);
+    } else {
+      console.log('✅ [CRON] No new invoices needed');
+    }
+  } catch (error) {
+    console.error('❌ [CRON] Auto invoice generation error:', error);
+  }
+}, INVOICE_GENERATION_INTERVAL);
+
+console.log('📅 Invoice auto-generation cron job started (runs every 1 hour)');
+
 // ==================== START SERVER ====================
 app.listen(PORT, async () => {
   console.log(`
-╔═══════════════════════════════════════════════════════╗
-║ 🚀 ISP Billing API Server v2.1 (with Overdue & Quick Customer) ║
-║ 📡 Running on: http://localhost:${PORT} ║
-║ 🌍 Environment: ${process.env.NODE_ENV || 'development'} ║
-║ 💾 Database: ${process.env.DB_NAME || 'ispbilling'} ║
-║ 🔐 Authentication: Enabled ║
-║ ⏰ Started: ${new Date().toISOString()} ║
-╚═══════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════╗
+║ 🚀 ISP Billing API Server v2.3 (FIXED MULTIPLE INVOICES)    ║
+║ 📡 Running on: http://localhost:${PORT}                      ║
+║ 🌍 Environment: ${process.env.NODE_ENV || 'development'}     ║
+║ 💾 Database: ${process.env.DB_NAME || 'ispbilling'}          ║
+║ 🔐 Authentication: Enabled                                    ║
+║ 📅 Auto Invoice Generation: Every 1 hour                      ║
+║ ⏰ Started: ${new Date().toISOString()}                       ║
+╚═══════════════════════════════════════════════════════════════╝
   `);
  
   await initializeDatabase();

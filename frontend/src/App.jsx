@@ -1,3 +1,6 @@
+// ================================================
+// FILE: frontend/src/App.jsx - FIXED WITH NAVIGATION HANDLER
+// ================================================
 import { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,10 +19,14 @@ function App() {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Jika tidak authenticated, AuthContext akan redirect ke login
   if (!isAuthenticated) {
     return null;
   }
+
+  // ✅ Handler untuk navigasi dari Dashboard ke page lain
+  const handleNavigate = (menuId) => {
+    setActiveMenu(menuId);
+  };
 
   const renderContent = () => {
     const pageVariants = {
@@ -29,7 +36,7 @@ function App() {
     };
 
     const pages = {
-      dashboard: <Dashboard />,
+      dashboard: <Dashboard onNavigate={handleNavigate} />, // ✅ Pass handler
       customers: <Customers />,
       packages: <Packages />,
       invoices: <Invoices />,
