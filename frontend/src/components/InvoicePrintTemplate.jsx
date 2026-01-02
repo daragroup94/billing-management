@@ -45,7 +45,7 @@ const InvoicePrintTemplate = ({ invoice, onClose }) => {
         >
           {/* Toolbar */}
           <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <h3 className="text-xl font-bold text-white">Invoice Preview</h3>
+            <h3 className="text-xl font-bold text-white">Preview Faktur</h3>
             <div className="flex items-center gap-2">
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -63,7 +63,7 @@ const InvoicePrintTemplate = ({ invoice, onClose }) => {
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-all"
               >
                 <Printer size={18} />
-                Print
+                Cetak
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -125,7 +125,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
     created_at: invoice?.created_at || new Date(),
     due_date: invoice?.due_date || new Date(),
     status: invoice?.status || 'unpaid',
-    package_name: invoice?.package_name || 'Standard Package',
+    package_name: invoice?.package_name || 'Paket Standar',
     package_speed: invoice?.package_speed || 'N/A',
     amount: invoice?.amount || 0,
     discount: invoice?.discount || 0,
@@ -152,37 +152,37 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
               </div>
               <div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  DARANETT
+                  daranett
                 </h1>
-                <p className="text-sm text-gray-600 font-semibold">Internet Service Provider</p>
+                <p className="text-sm text-gray-600 font-semibold">Penyedia Layanan Internet</p>
               </div>
             </div>
             <div className="mt-4 space-y-1 text-sm text-gray-600">
-              <p className="font-semibold text-gray-800">PT. Daranett Indonesia</p>
+              <p className="font-semibold text-gray-800">daranett</p>
               <p>Desa Bacin, Ngempik</p>
               <p>Kec. Bae, Kab. Kudus, Jawa Tengah</p>
-              <p>📞 +62 812 3456 7890</p>
-              <p>✉️ info@daranett.id</p>
-              <p>🌐 www.daranett.id</p>
+              <p>📞 +62 895 3274 49707</p>
+              <p>✉️ groupdara45@gmail.com</p>
+              <p>🌐 promo.access.daranett.com</p>
             </div>
           </div>
 
           {/* Invoice Info */}
           <div className="text-right">
             <div className="inline-block px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg mb-4">
-              <h2 className="text-2xl font-bold text-white">INVOICE</h2>
+              <h2 className="text-2xl font-bold text-white">FAKTUR</h2>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between gap-8">
-                <span className="text-gray-600 font-semibold">Invoice No:</span>
+                <span className="text-gray-600 font-semibold">No Faktur:</span>
                 <span className="font-bold text-blue-600">{safeInvoice.invoice_number}</span>
               </div>
               <div className="flex justify-between gap-8">
-                <span className="text-gray-600 font-semibold">Date:</span>
+                <span className="text-gray-600 font-semibold">Tanggal:</span>
                 <span className="font-semibold">{formatDate(safeInvoice.created_at)}</span>
               </div>
               <div className="flex justify-between gap-8">
-                <span className="text-gray-600 font-semibold">Due Date:</span>
+                <span className="text-gray-600 font-semibold">Jatuh Tempo:</span>
                 <span className="font-semibold text-red-600">{formatDate(safeInvoice.due_date)}</span>
               </div>
               <div className="flex justify-between gap-8">
@@ -192,7 +192,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
                     ? 'bg-green-100 text-green-700' 
                     : 'bg-red-100 text-red-700'
                 }`}>
-                  {safeInvoice.status.toUpperCase()}
+                  {safeInvoice.status === 'paid' ? 'LUNAS' : 'BELUM LUNAS'}
                 </span>
               </div>
             </div>
@@ -208,7 +208,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
               <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
             </svg>
           </div>
-          Bill To
+          Tagihan Kepada
         </h3>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -218,13 +218,13 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
             </p>
             {safeInvoice.customer_phone && (
               <p className="text-sm text-gray-600">
-                <span className="font-semibold">Phone:</span> {safeInvoice.customer_phone}
+                <span className="font-semibold">Telepon:</span> {safeInvoice.customer_phone}
               </p>
             )}
           </div>
           {safeInvoice.customer_address && (
             <div className="text-right">
-              <p className="text-xs text-gray-500 font-semibold mb-1">Customer Address:</p>
+              <p className="text-xs text-gray-500 font-semibold mb-1">Alamat Pelanggan:</p>
               <p className="text-sm text-gray-700">{safeInvoice.customer_address}</p>
             </div>
           )}
@@ -236,17 +236,17 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
-              <th className="py-4 px-4 text-left font-bold">Description</th>
-              <th className="py-4 px-4 text-center font-bold">Package</th>
-              <th className="py-4 px-4 text-center font-bold">Period</th>
-              <th className="py-4 px-4 text-right font-bold">Amount</th>
+              <th className="py-4 px-4 text-left font-bold">Deskripsi</th>
+              <th className="py-4 px-4 text-center font-bold">Paket</th>
+              <th className="py-4 px-4 text-center font-bold">Periode</th>
+              <th className="py-4 px-4 text-right font-bold">Jumlah</th>
             </tr>
           </thead>
           <tbody>
             <tr className="border-b border-gray-200 hover:bg-blue-50 transition-colors">
               <td className="py-4 px-4">
-                <p className="font-semibold text-gray-800">Internet Service Subscription</p>
-                <p className="text-xs text-gray-500 mt-1">Monthly subscription fee</p>
+                <p className="font-semibold text-gray-800">Langganan Layanan Internet</p>
+                <p className="text-xs text-gray-500 mt-1">Biaya langganan bulanan</p>
               </td>
               <td className="py-4 px-4 text-center">
                 <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
@@ -257,7 +257,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
                 )}
               </td>
               <td className="py-4 px-4 text-center text-sm text-gray-600">
-                1 Month
+                1 Bulan
               </td>
               <td className="py-4 px-4 text-right font-bold text-gray-800">
                 {formatPrice(safeInvoice.amount)}
@@ -280,7 +280,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
             {(safeInvoice.discount && parseFloat(safeInvoice.discount) > 0) && (
               <div className="flex justify-between py-2 border-b border-gray-200">
                 <div>
-                  <span className="font-semibold text-red-600">Discount:</span>
+                  <span className="font-semibold text-red-600">Diskon:</span>
                   {safeInvoice.discount_note && (
                     <p className="text-xs text-gray-500 mt-1">({safeInvoice.discount_note})</p>
                   )}
@@ -290,13 +290,13 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
             )}
             
             <div className="flex justify-between text-gray-600 py-2 border-b border-gray-200">
-              <span className="font-semibold">Tax (0%):</span>
+              <span className="font-semibold">Pajak (0%):</span>
               <span className="font-semibold">{formatPrice(0)}</span>
             </div>
             
             {/* Final Total */}
             <div className="flex justify-between text-xl font-bold py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 rounded-lg shadow-lg">
-              <span>TOTAL TO PAY:</span>
+              <span>TOTAL BAYAR:</span>
               <span>{formatPrice(safeInvoice.final_amount)}</span>
             </div>
             
@@ -304,7 +304,7 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
             {(safeInvoice.discount && parseFloat(safeInvoice.discount) > 0) && (
               <div className="mt-3 p-3 bg-green-50 border-l-4 border-green-500 rounded-r-lg">
                 <p className="text-xs text-green-700 font-semibold">
-                  ✓ You saved {formatPrice(safeInvoice.discount)} with this invoice!
+                  ✓ Anda hemat {formatPrice(safeInvoice.discount)} untuk faktur ini!
                 </p>
               </div>
             )}
@@ -321,23 +321,22 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
               <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
             </svg>
           </div>
-          Payment Information
+          Informasi Pembayaran
         </h3>
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <p className="text-sm font-bold text-gray-700 mb-2">Bank Transfer:</p>
+            <p className="text-sm font-bold text-gray-700 mb-2">Transfer Bank:</p>
             <div className="space-y-1 text-sm text-gray-600">
-              <p><span className="font-semibold">Bank:</span> BCA</p>
-              <p><span className="font-semibold">Account No:</span> 1234567890</p>
-              <p><span className="font-semibold">Account Name:</span> PT. Daranett Indonesia</p>
+              <p><span className="font-semibold">Nama Rekening:</span> Rizky Ariyanti</p>
+              <p><span className="font-semibold">BRI:</span> 340901038897531</p>
+              <p><span className="font-semibold">Mandiri:</span> 1840000586717</p>
             </div>
           </div>
           <div>
-            <p className="text-sm font-bold text-gray-700 mb-2">Alternative Payment:</p>
+            <p className="text-sm font-bold text-gray-700 mb-2">Konfirmasi Pembayaran:</p>
             <div className="space-y-1 text-sm text-gray-600">
-              <p><span className="font-semibold">E-Wallet:</span> DANA / OVO</p>
-              <p><span className="font-semibold">Number:</span> +62 812 3456 7890</p>
-              <p><span className="font-semibold">Payment Proof:</span> WhatsApp to +62 812 3456 7890</p>
+              <p><span className="font-semibold">WhatsApp:</span> +62 895 3274 49707</p>
+              <p className="text-xs text-gray-500 mt-2">Kirim bukti transfer beserta nomor faktur</p>
             </div>
           </div>
         </div>
@@ -345,13 +344,13 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
 
       {/* Terms & Notes */}
       <div className="mb-8 p-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl">
-        <h3 className="text-sm font-bold text-amber-800 mb-2">Payment Terms & Notes:</h3>
+        <h3 className="text-sm font-bold text-amber-800 mb-2">Syarat & Ketentuan Pembayaran:</h3>
         <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
-          <li>Payment must be received by the due date to avoid service interruption</li>
-          <li>Please include invoice number in payment description</li>
-          <li>Send payment proof via WhatsApp for faster confirmation</li>
-          <li>Late payment may incur additional charges</li>
-          <li>For any inquiries, please contact our customer service</li>
+          <li>Pembayaran harus diterima sebelum tanggal jatuh tempo untuk menghindari pemutusan layanan</li>
+          <li>Harap cantumkan nomor faktur pada keterangan transfer</li>
+          <li>Kirim bukti pembayaran via WhatsApp untuk konfirmasi lebih cepat</li>
+          <li>Keterlambatan pembayaran dapat dikenakan biaya tambahan</li>
+          <li>Untuk pertanyaan, silakan hubungi layanan pelanggan kami</li>
         </ul>
       </div>
 
@@ -359,15 +358,15 @@ const PrintableInvoice = ({ invoice, formatPrice, formatDate }) => {
       <div className="border-t-2 border-gray-300 pt-6">
         <div className="flex justify-between items-end">
           <div className="text-xs text-gray-500 space-y-1">
-            <p>Invoice generated on {formatDate(new Date())}</p>
+            <p>Faktur dibuat pada {formatDate(new Date())}</p>
             <p>Powered by Daranett Billing System v2.0</p>
-            <p className="text-blue-600 font-semibold">Thank you for choosing Daranett!</p>
+            <p className="text-blue-600 font-semibold">Terima kasih telah memilih daranett!</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-gray-500 mb-4">Authorized Signature</p>
+            <p className="text-xs text-gray-500 mb-4">Tanda Tangan</p>
             <div className="border-t-2 border-gray-800 w-48 pt-2">
-              <p className="text-sm font-bold text-gray-800">Management</p>
-              <p className="text-xs text-gray-600">PT. Daranett Indonesia</p>
+              <p className="text-sm font-bold text-gray-800">Manajemen</p>
+              <p className="text-xs text-gray-600">daranett</p>
             </div>
           </div>
         </div>
